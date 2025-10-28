@@ -1,0 +1,7 @@
+app:
+  port: 8080
+database:
+  driver: mysql
+  source: 127.0.0.1
+  user: root
+  pass: 123456
