@@ -1,11 +1,13 @@
 package app
 
 import (
+	"spider-go/internal/model"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
-func initDB() *gorm.DB {
+func InitDB() *gorm.DB {
 	if err := LoadConfig(); err != nil {
 		panic(err.Error())
 	}
@@ -13,6 +15,8 @@ func initDB() *gorm.DB {
 	if err != nil {
 		panic(err.Error())
 	}
-	_ = db.AutoMigrate()
+	_ = db.AutoMigrate(
+		&model.User{},
+	)
 	return db
 }

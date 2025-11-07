@@ -2,6 +2,8 @@ app:
   port: 8080
 database:
   driver: mysql
-  source: 127.0.0.1
-  user: root
-  pass: 123456
+  source: 129.204.200.248
+  port: 3306
+  user: spider-go_dev
+  pass: 18608459749fd
+  name: spider-go_dev

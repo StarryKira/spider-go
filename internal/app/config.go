@@ -16,10 +16,11 @@ type Appconfig struct {
 }
 
 type DatabaseConfig struct {
-	Host string `yaml:"host" mapstructure:"host"`
+	Host string `yaml:"source" mapstructure:"source"`
 	Port int    `yaml:"port" mapstructure:"port"`
 	User string `yaml:"user" mapstructure:"user"`
 	Pass string `yaml:"pass" mapstructure:"pass"`
+	Name string `yaml:"name" mapstructure:"name"`
 }
 
 var Conf *Config
@@ -46,5 +47,5 @@ func GetDSN() string {
 	db := Conf.Database
 	// 格式: user:pass@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		db.User, db.Pass, db.Host, db.Port, "your_db_name")
+		db.User, db.Pass, db.Host, db.Port, db.Name)
 }
