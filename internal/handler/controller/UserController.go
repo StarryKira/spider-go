@@ -31,7 +31,6 @@ func (h *UserController) Login(c *gin.Context) {
 		return
 	}
 
-	// 可选：同时下发 HttpOnly Cookie（与前端约定好用不用）
 	maxAge := int((168 * time.Hour).Seconds()) // 与 service 里 7 天过期一致
 	c.SetCookie("access_token", token, maxAge, "/", "", true, true)
 
@@ -53,4 +52,20 @@ func (h *UserController) Register(c *gin.Context) {
 	}
 
 	dto.Success(c, gin.H{"message": "registered"})
+}
+
+func (h *UserController) BindJwcAccount(c *gin.Context) {
+	var req dto.BindRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		dto.BadRequest(c, 40002, err.Error())
+		return
+	}
+	ret, err := h.userSvc.Bind(c, req.Sid, req.Spwd)
+	if err != nil {
+		dto.BadRequest(c, 40004, err.Error())
+		return
+	}
+	dto.Success(c, gin.H{
+		"msg": ret,
+	})
 }

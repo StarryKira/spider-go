@@ -32,22 +32,23 @@ type gormUserRepository struct {
 
 func (repo *gormUserRepository) GetUserByEmail(Email string) (*model.User, error) {
 	var user = &model.User{}
-	err := repo.gormDB.Where(Email).First(user).Error
+	err := repo.gormDB.Where("email=?", Email).First(user).Error
 	return user, err
 }
 
 func (repo *gormUserRepository) GetUserByUid(uid int) (*model.User, error) {
 	var user = &model.User{}
-	err := repo.gormDB.First(user, uid).Error
+	err := repo.gormDB.Find(user, uid).Error
 	return user, err
 }
 
 func (repo *gormUserRepository) GetUserByName(name string) (*model.User, error) {
 	var user = &model.User{}
-	err := repo.gormDB.Where(name).First(user).Error
+	err := repo.gormDB.Where("name=?", name).First(user).Error
 	return user, err
 }
 
+// 更新教务处信息
 func (repo *gormUserRepository) UpdateJwc(uid int, sid string, spwd string) error {
 	err := repo.gormDB.Model(&model.User{}).Where(uid).Update("sid", sid).Update("spwd", spwd).Error
 	return err
