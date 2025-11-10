@@ -1,20 +1,22 @@
-package service
+package utils
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
-	"spider-go/internal/utils"
+	"spider-go/internal/app"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
-func Jwclogin(username string, jwcpassword string) string {
+func Jwclogin(username string, jwcpassword string) (string, error) {
 	// 1️ GET 请求获取登录页面及表单隐藏字段
-	res, err := http.Get(utils.Jwc_url)
+	res, err := http.Get(Jwc_url)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -41,7 +43,7 @@ func Jwclogin(username string, jwcpassword string) string {
 	fmt.Println("lt:", lt, "dllt:", dllt, "execution:", execution, "eventID:", eventID, "salt:", salt)
 
 	// 2️ 加密密码
-	encryptedPwd := utils.JsCrypto(jwcpassword, salt)
+	encryptedPwd := JsCrypto(jwcpassword, salt)
 	log.Println("encryptedPwd:", encryptedPwd)
 
 	// 3️ 构造 URL 编码的表单数据
@@ -54,16 +56,18 @@ func Jwclogin(username string, jwcpassword string) string {
 	form.Set("_eventId", eventID)
 	form.Set("rmShown", rmShown)
 
+	redirectUrl := ""
+
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			// 返回错误，阻止任何重定向，之后在这里直接处理redirect
-			println(req.URL.String())
+			redirectUrl = req.URL.String()
 			return http.ErrUseLastResponse
 		},
 	}
 
 	// 4️ 创建 POST 请求
-	request, err := http.NewRequest("POST", utils.Jwc_url, strings.NewReader(form.Encode()))
+	request, err := http.NewRequest("POST", Jwc_url, strings.NewReader(form.Encode()))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -86,5 +90,26 @@ func Jwclogin(username string, jwcpassword string) string {
 	defer resp.Body.Close()
 	log.Println("Response Status Code:", resp.StatusCode)
 
-	return strconv.Itoa(resp.StatusCode)
+	if resp.StatusCode == http.StatusFound || resp.StatusCode == http.StatusMovedPermanently {
+		if redirectUrl != "" {
+			return redirectUrl, nil
+		}
+	}
+	return "", errors.New("登录失败，你犯天条了")
+}
+
+// 把uid和cookie塞redis里，林科大教务处是一个小时过期，redis设置一小时过期
+func HandleRedirect(uid int, redirectUrl string) (string, error) {
+	res, err := http.Get(redirectUrl)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	app.Rdb.Set(app.Ctx, strconv.Itoa(uid), res.Cookies(), time.Hour)
+	doc, err := goquery.NewDocumentFromReader(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	name := doc.Find("#Top1_divLoginName").Text()
+	return name, nil
 }

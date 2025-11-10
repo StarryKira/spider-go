@@ -9,7 +9,7 @@ import (
 
 var secret = []byte("Haruka")
 
-func SetupRoutes(r *gin.Engine, uc *controller.UserController) {
+func SetupRoutes(r *gin.Engine, uc *controller.UserController, gc *controller.GradeController) {
 	r.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "hello world",
@@ -17,12 +17,11 @@ func SetupRoutes(r *gin.Engine, uc *controller.UserController) {
 	})
 	api := r.Group("/api")
 
-	//test
-	api.POST("/jwclogin", controller.Jwclogin)
-	//endtest
-
+	// api路由
 	api.POST("login", uc.Login)
 	api.POST("/register", uc.Register)
+
 	user := api.Group("/user")
+	user.GET("/getallgrades", gc.GetAllGrade)
 	user.Use(middleware.AuthMiddleWare(secret))
 }

@@ -17,14 +17,16 @@ func main() {
 	userRepo := repository.NewGormUserRepository(app.InitDB())
 	userSvc := service.NewUserService(userRepo)
 	userController := controller.NewUserController(userSvc)
+	gradeSvc := service.NewGradeService()
+	gradeController := controller.NewGradeController(gradeSvc)
 	r := gin.Default()
-	api.SetupRoutes(r, userController)
+	api.SetupRoutes(r, userController, gradeController)
 
 	if err := app.LoadConfig(); err != nil {
 		log.Fatalf("config error: %v \n", err)
 	}
 	app.InitDB()
-
+	app.InitRedis()
 	err := r.Run(":" + strconv.Itoa(app.Conf.App.Port))
 	if err != nil {
 		return
