@@ -7,3 +7,7 @@ database:
   user: spider-go_dev
   pass: 18608459749fd
   name: spider-go_dev
+redis:
+  host: 129.204.200.248:6379
+  pass: redis_RZpfr5
+  db: 0

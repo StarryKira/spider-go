@@ -44,7 +44,7 @@ func (s *UserService) UserLogin(Email, password string) (string, error) {
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte("secret"))
+	tokenString, err := token.SignedString([]byte("Haruka"))
 	if err != nil {
 		return "", err
 	}

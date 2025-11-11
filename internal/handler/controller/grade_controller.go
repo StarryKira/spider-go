@@ -14,6 +14,13 @@ func NewGradeController(gradeSvc *service.GradeService) *GradeController {
 	return &GradeController{gradeSvc: gradeSvc}
 }
 
-func (c *GradeController) GetAllGrade(*gin.Context) {
+func (h *GradeController) GetAllGrade(c *gin.Context) {
+	uid := c.GetInt("uid")
+	grade, err := h.gradeSvc.GetAllGrade(uid)
+	if err != nil {
+		return
+	}
+
+	c.JSON(200, grade)
 
 }

@@ -14,7 +14,7 @@ func AuthMiddleWare(secret []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.Request.Header.Get("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			dto.Unauthorized(c, 401, "invalid JWT token")
+			dto.Unauthorized(c, 401, "2invalid JWT token")
 			c.Abort()
 			return
 		}
@@ -25,7 +25,7 @@ func AuthMiddleWare(secret []byte) gin.HandlerFunc {
 		})
 		//检查是否出错
 		if err != nil {
-			dto.Unauthorized(c, 401, "invalid JWT token")
+			dto.Unauthorized(c, 401, "1invalid JWT token")
 			c.Abort()
 			return
 		}

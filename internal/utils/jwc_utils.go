@@ -38,6 +38,8 @@ func Jwclogin(username string, jwcpassword string) (string, error) {
 	salt := doc.Find("input[id='pwdDefaultEncryptSalt']").AttrOr("value", "")
 	rmShown := doc.Find("input[name='rmShown']").AttrOr("value", "")
 
+	//TODO 验证码处理
+
 	//need, _ := http.Get(utils.Captcha_url + "username=" + username + "&pwdEncrypt2=pwdEncryptSalt" + "&_=" + strconv.FormatInt(time.Now().Unix(), 13))
 
 	fmt.Println("lt:", lt, "dllt:", dllt, "execution:", execution, "eventID:", eventID, "salt:", salt)
