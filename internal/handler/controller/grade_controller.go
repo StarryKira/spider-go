@@ -22,5 +22,4 @@ func (h *GradeController) GetAllGrade(c *gin.Context) {
 	}
 
 	c.JSON(200, grade)
-
 }

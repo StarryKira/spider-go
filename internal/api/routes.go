@@ -23,6 +23,7 @@ func SetupRoutes(r *gin.Engine, uc *controller.UserController, gc *controller.Gr
 
 	user := api.Group("/user")
 	user.Use(middleware.AuthMiddleWare(secret))
-	user.GET("/getallgrades", gc.GetAllGrade)
-	user.POST("bind", uc.BindJwcAccount)
+	user.POST("bind", uc.BindJwcAccount)    //绑定校园网账号
+	user.GET("/grades/all", gc.GetAllGrade) //获取全部成绩
+
 }
