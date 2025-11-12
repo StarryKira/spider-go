@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"spider-go/internal/dto"
 	"spider-go/internal/handler/service"
 
 	"github.com/gin-gonic/gin"
@@ -15,11 +16,14 @@ func NewGradeController(gradeSvc *service.GradeService) *GradeController {
 }
 
 func (h *GradeController) GetAllGrade(c *gin.Context) {
-	uid := c.GetInt("uid")
-	grade, err := h.gradeSvc.GetAllGrade(uid)
+	uid, ok := c.Get("uid")
+	if !ok {
+		dto.BadRequest(c, 114514, "invalid token")
+	}
+	grade, err := h.gradeSvc.GetAllGrade(uid.(int))
 	if err != nil {
+		dto.Error(c, 200, 111, err.Error())
 		return
 	}
-
-	c.JSON(200, grade)
+	dto.Success(c, grade)
 }

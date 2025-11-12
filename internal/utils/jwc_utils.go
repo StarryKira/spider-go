@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -106,8 +107,14 @@ func HandleRedirect(uid int, redirectUrl string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	defer res.Body.Close()
-	app.Rdb.Set(app.Ctx, strconv.Itoa(uid), res.Cookies(), time.Hour)
+
+	cookies := res.Cookies()
+
+	data, _ := json.Marshal(cookies)
+
+	app.Rdb.Set(app.Ctx, strconv.Itoa(uid), data, time.Hour)
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
 		log.Fatal(err)

@@ -17,7 +17,7 @@ func main() {
 	userRepo := repository.NewGormUserRepository(app.InitDB())
 	userSvc := service.NewUserService(userRepo)
 	userController := controller.NewUserController(userSvc)
-	gradeSvc := service.NewGradeService()
+	gradeSvc := service.NewGradeService(userRepo)
 	gradeController := controller.NewGradeController(gradeSvc)
 	r := gin.Default()
 	api.SetupRoutes(r, userController, gradeController)
