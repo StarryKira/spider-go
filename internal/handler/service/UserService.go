@@ -2,8 +2,10 @@ package service
 
 import (
 	"errors"
+	"spider-go/internal/app"
 	"spider-go/internal/model"
 	"spider-go/internal/repository"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -69,6 +71,7 @@ func (s *UserService) Bind(c *gin.Context, sid, spwd string) (string, error) {
 		return "", errors.New("invalid params")
 	}
 	uid, ok := c.Get("uid")
+	uidstring := strconv.Itoa(uid.(int))
 	if !ok {
 		return "", errors.New("user id not found in context")
 	}
@@ -77,7 +80,16 @@ func (s *UserService) Bind(c *gin.Context, sid, spwd string) (string, error) {
 	if err != nil {
 		return "", errors.New("invalid sid or password")
 	}
-
+	isRedisHasCache, err := app.Rdb.Exists(app.Ctx, uidstring).Result()
+	if err != nil {
+		return "Redis错误", err
+	}
+	if isRedisHasCache > 0 {
+		_, err1 := app.Rdb.Del(app.Ctx, uidstring).Result()
+		if err1 != nil {
+			return "redis error", err1
+		}
+	}
 	return "success", nil
 
 }

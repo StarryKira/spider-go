@@ -11,3 +11,6 @@ redis:
   host: 129.204.200.248:6379
   pass: redis_RZpfr5
   db: 0
+aliyun:
+  api_key:
+  secret:

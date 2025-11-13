@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"flag"
 	"spider-go/internal/dto"
 	"spider-go/internal/handler/service"
 
@@ -10,6 +9,12 @@ import (
 
 type GradeController struct {
 	gradeSvc *service.GradeService
+}
+
+type GradeResponse struct {
+	Total     int             `json:"total"`
+	GPA       service.GPA     `json:"gpa"`
+	GradeList []service.Grade `json:"grades"`
 }
 
 func NewGradeController(gradeSvc *service.GradeService) *GradeController {
@@ -21,12 +26,16 @@ func (h *GradeController) GetAllGrade(c *gin.Context) {
 	if !ok {
 		dto.BadRequest(c, 114514, "invalid token")
 	}
-	grade, err := h.gradeSvc.GetAllGrade(uid.(int))
+	grade, gpa, err := h.gradeSvc.GetAllGrade(uid.(int))
 	if err != nil {
 		dto.Error(c, 200, 111, err.Error())
 		return
 	}
-	dto.Success(c, gin.H{"total": len(grade), "gradeList": grade})
+	dto.Success(c, GradeResponse{
+		GradeList: grade,
+		GPA:       *gpa,
+		Total:     len(grade),
+	})
 }
 
 func (h *GradeController) GetGradeByTerm(c *gin.Context) {
@@ -39,5 +48,14 @@ func (h *GradeController) GetGradeByTerm(c *gin.Context) {
 		dto.BadRequest(c, 114514, "invalid request")
 		return
 	}
-
+	grades, gpa, err := h.gradeSvc.GetGradeByTerm(uid.(int), req.Term)
+	if err != nil {
+		dto.Error(c, 200, 114514, err.Error())
+		return
+	}
+	dto.Success(c, GradeResponse{
+		GradeList: grades,
+		GPA:       *gpa,
+		Total:     len(grades),
+	})
 }

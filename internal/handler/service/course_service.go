@@ -23,8 +23,7 @@ type WeekSchedule struct {
 }
 
 type Course struct {
-	ID          int    `json:"id"`           // 课程唯一ID（可选）
-	Name        string `json:"name"`         // 课程名称：高等数学
+	Name        string `json:"name"`         // 课程名称
 	Teacher     string `json:"teacher"`      // 任课老师
 	Classroom   string `json:"classroom"`    // 教室：A1-203
 	Weekday     int    `json:"weekday"`      // 周几：1~7 表示周一~周日
@@ -34,6 +33,6 @@ type Course struct {
 	EndTime     string `json:"end_time"`     // "09:40"
 }
 
-func (s *CourseService) getCourseTable(week int) (*WeekSchedule, error) {
-
-}
+//func (s *CourseService) getCourseTable(week int) (*WeekSchedule, error) {
+//
+//}
