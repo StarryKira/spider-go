@@ -33,7 +33,6 @@ func (s *UserService) UserLogin(Email, password string) (string, error) {
 	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) != nil {
 		return "", errors.New("invalid email or password")
 	}
-
 	claims := Claims{
 		Uid:  user.Uid,
 		Name: user.Name,
@@ -81,4 +80,12 @@ func (s *UserService) Bind(c *gin.Context, sid, spwd string) (string, error) {
 
 	return "success", nil
 
+}
+
+func (s *UserService) GetUserInfo(uid int) (*model.User, error) {
+	user, err := s.uRepo.GetUserByUid(uid)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }

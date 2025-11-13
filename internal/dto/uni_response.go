@@ -19,7 +19,6 @@ func Success(c *gin.Context, data interface{}) {
 		Data: data,
 	})
 }
-
 func Error(c *gin.Context, httpStatus int, code int, message string) {
 	c.JSON(httpStatus, Response{
 		Code: code,

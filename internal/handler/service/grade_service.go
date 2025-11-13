@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"spider-go/internal/app"
@@ -27,6 +28,12 @@ type Grade struct {
 	Credit   float64 `json:"credit"`   // 学分
 	Gpa      float64 `json:"gpa"`      // 绩点
 	Property string  `json:"property"` // 课程性质/属性（见下方说明）
+}
+
+type GPA struct {
+	AverageGPA   float64 `json:"averageGPA"`
+	AverageScore float64 `json:"averageScore"`
+	BasicScore   float64 `json:"basicScore"`
 }
 
 func NewGradeService(uRepo repository.UserRepository) *GradeService {
@@ -57,12 +64,9 @@ func (s *GradeService) GetAllGrade(uid int) ([]Grade, error) {
 		}
 	} else {
 		// 登录 -> 跟随一次重定向拿 cookie -> 回读 redis
-		redirectlink, err := utils.Jwclogin(user.Sid, user.Spwd)
+		err := utils.LoginAndStoreSession(uid, user.Sid, user.Spwd)
 		if err != nil {
 			return nil, err
-		}
-		if name, err := utils.HandleRedirect(uid, redirectlink); err != nil {
-			return nil, errors.New(name)
 		}
 		data, _ := app.Rdb.Get(app.Ctx, strconv.Itoa(uid)).Bytes()
 		if err := json.Unmarshal(data, &cookies); err != nil {
@@ -94,22 +98,40 @@ func (s *GradeService) GetAllGrade(uid int) ([]Grade, error) {
 	}
 	defer resp.Body.Close()
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	return parseGradesFromHTML(resp.Body)
+}
+
+// 兼容神人教务系统用的
+func parseFloatSafe(s string) float64 {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	// 兼容“3.0 ”、“3,0”之类
+	s = strings.ReplaceAll(s, ",", "")
+	v, _ := strconv.ParseFloat(s, 64)
+	return v
+}
+
+// 解析HTML
+func parseGradesFromHTML(r io.Reader) ([]Grade, error) {
+	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
 		return nil, err
 	}
 
-	// 4) 解析表格
+	table := doc.Find("#dataList")
+	if table.Length() == 0 {
+		return nil, errors.New("未找到 #dataList，可能未登录或被重定向到登录页")
+	}
+
 	var grades []Grade
-	doc.Find("#dataList tr").Each(func(i int, tr *goquery.Selection) {
+	table.Find("tr").Each(func(i int, tr *goquery.Selection) {
 		tds := tr.Find("td")
-		// 至少 13 列：序号 开课学期 课程编号 课程名称 成绩 学分 总学时 绩点 成绩标志 考核方式 考试性质 课程属性 课程性质
 		if tds.Length() < 13 {
 			return
 		}
-
 		trim := func(s string) string {
-			// 去除常见空白和全角空格
 			return strings.TrimSpace(strings.ReplaceAll(s, "\u00A0", ""))
 		}
 
@@ -117,26 +139,19 @@ func (s *GradeService) GetAllGrade(uid int) ([]Grade, error) {
 		term := trim(tds.Eq(1).Text())
 		code := trim(tds.Eq(2).Text())
 		subject := trim(tds.Eq(3).Text())
-		score := trim(tds.Eq(4).Text())
+		score := trim(tds.Eq(4).Text()) // <font> 或 <a> 里的文本都会被 .Text() 拿到
 
-		creditStr := trim(tds.Eq(5).Text()) // 学分
-		gpaStr := trim(tds.Eq(7).Text())    // 绩点
+		credit := parseFloatSafe(trim(tds.Eq(5).Text()))
+		gpa := parseFloatSafe(trim(tds.Eq(7).Text()))
 
-		// “课程属性/课程性质”在第 11/12 列（下标 11/12），你可以按需取其一
 		property := trim(tds.Eq(12).Text())
 		if property == "" {
 			property = trim(tds.Eq(11).Text())
 		}
 
-		// 可能出现“及格/不及格”等字符串，无需转数值
-		credit := parseFloatSafe(creditStr)
-		gpa := parseFloatSafe(gpaStr)
-
-		// 跳过明显空行
 		if subject == "" && score == "" {
 			return
 		}
-
 		grades = append(grades, Grade{
 			SerialNo: serialNo,
 			Term:     term,
@@ -150,20 +165,17 @@ func (s *GradeService) GetAllGrade(uid int) ([]Grade, error) {
 	})
 
 	if len(grades) == 0 {
-		// 友好提示：可能是 cookie 失效或页面需要登录
-		return nil, errors.New("未解析到成绩，请检查是否登录成功（cookie 是否有效）以及页面编码/选择器是否正确")
+		return nil, errors.New("未解析到成绩，检查是否被重定向或选择器/编码不匹配")
 	}
-
 	return grades, nil
 }
 
-func parseFloatSafe(s string) float64 {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0
+func (s *GradeService) calculateGPA(gradeArray []Grade) {
+	var avarageScore float64
+	var avarageGPA float64
+	var basicScore float64
+	//遍历gradeArray计算平均值
+	for _, val := range gradeArray {
+		int
 	}
-	// 兼容“3.0 ”、“3,0”之类
-	s = strings.ReplaceAll(s, ",", "")
-	v, _ := strconv.ParseFloat(s, 64)
-	return v
 }

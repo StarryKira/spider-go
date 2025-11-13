@@ -69,3 +69,17 @@ func (h *UserController) BindJwcAccount(c *gin.Context) {
 		"msg": ret,
 	})
 }
+
+func (h *UserController) GetUserInfo(c *gin.Context) {
+	uid, ok := c.Get("uid")
+	if !ok {
+		dto.BadRequest(c, 114514, "invalid token")
+		return
+	}
+	user, err := h.userSvc.GetUserInfo(uid.(int))
+	if err != nil {
+		dto.BadRequest(c, 40005, err.Error())
+		return
+	}
+	dto.Success(c, user)
+}
