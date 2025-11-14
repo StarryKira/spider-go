@@ -39,11 +39,18 @@ type GPA struct {
 	AverageScore float64 `json:"averageScore"`
 	BasicScore   float64 `json:"basicScore"`
 }
+type LevelGrade struct {
+	No         string `json:"no"`
+	CourseName string `json:"CourseName"`
+	LevGrade   string `json:"LevelGrade"`
+	Time       string `json:"Time"`
+}
 
 func NewGradeService(uRepo repository.UserRepository) *GradeService {
 	return &GradeService{uRepo: uRepo}
 }
 
+// 获取所有考试成绩
 func (s *GradeService) GetAllGrade(uid int) ([]Grade, *GPA, error) {
 	user, err := s.uRepo.GetUserByUid(uid)
 	if err != nil {
@@ -112,6 +119,7 @@ func (s *GradeService) GetAllGrade(uid int) ([]Grade, *GPA, error) {
 	return GradeList, gpa, nil
 }
 
+// 根据学期获取考试成绩
 func (s *GradeService) GetGradeByTerm(uid int, term string) ([]Grade, *GPA, error) {
 	//校验输入term规则
 	re := regexp.MustCompile(`^\d{4}-\d{4}-[12]$`)
@@ -186,6 +194,93 @@ func (s *GradeService) GetGradeByTerm(uid int, term string) ([]Grade, *GPA, erro
 	return GradeList, gpa, nil
 }
 
+// 获取等级考试成绩，四六级那些
+func (s *GradeService) GetLevelGrades(uid int) ([]LevelGrade, error) {
+
+	user, err := s.uRepo.GetUserByUid(uid)
+	if err != nil {
+		return nil, err
+	}
+	if user.Sid == "" || user.Spwd == "" {
+		return nil, errors.New("请绑定教务系统")
+	}
+	isRedisHasCookie, err := app.Rdb.Exists(app.Ctx, strconv.Itoa(uid)).Result()
+	if err != nil {
+		return nil, errors.New("Redis错误")
+	}
+
+	var cookies []*http.Cookie
+	if isRedisHasCookie > 0 {
+		// 直接从 redis 读回 cookie 数组
+		data, _ := app.Rdb.Get(app.Ctx, strconv.Itoa(uid)).Bytes()
+		if err := json.Unmarshal(data, &cookies); err != nil {
+			return nil, err
+		}
+	} else {
+		// 登录 -> 跟随一次重定向拿 cookie -> 回读 redis
+		err := utils.LoginAndStoreSession(uid, user.Sid, user.Spwd)
+		if err != nil {
+			return nil, err
+		}
+		data, _ := app.Rdb.Get(app.Ctx, strconv.Itoa(uid)).Bytes()
+		if err := json.Unmarshal(data, &cookies); err != nil {
+			return nil, err
+		}
+	}
+	req, err := http.NewRequest("GET", utils.Grade_level_url, nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return parseLevelGradesFromHTML(resp.Body)
+
+}
+func parseLevelGradesFromHTML(html io.Reader) ([]LevelGrade, error) {
+	doc, err := goquery.NewDocumentFromReader(html)
+	if err != nil {
+		return nil, err
+	}
+	table := doc.Find("#dataList")
+	if table.Length() == 0 {
+		return nil, errors.New("未解析到datalist")
+	}
+	var LevelGrades []LevelGrade
+	table.Find("tr").Each(func(i int, s *goquery.Selection) {
+		tds := s.Find("td")
+		if tds.Length() < 9 {
+			return
+		}
+		trim := func(s string) string { return strings.ReplaceAll(s, "\u00A0", "") }
+		No := trim(tds.Eq(0).Text())
+		CourseName := trim(tds.Eq(1).Text())
+		//处理分数类成绩和等级类成绩，只输出等级类成绩
+		var LevGrade string = ""
+		if trim(tds.Eq(4).Text()) == "" {
+			LevGrade = trim(tds.Eq(7).Text())
+		} else {
+			LevGrade = trim(tds.Eq(4).Text())
+		}
+		Time := trim(tds.Eq(8).Text())
+		LevelGrades = append(LevelGrades, LevelGrade{
+			No:         No,
+			CourseName: CourseName,
+			LevGrade:   LevGrade,
+			Time:       Time,
+		})
+	})
+	return LevelGrades, nil
+}
+
 // 兼容神人教务系统用的
 func parseFloatSafe(s string) float64 {
 	s = strings.TrimSpace(s)
@@ -198,7 +293,7 @@ func parseFloatSafe(s string) float64 {
 	return v
 }
 
-// 解析HTML
+// 解析HTML 这个解析的是成绩的HTML不是等级考试的
 func parseGradesFromHTML(r io.Reader) ([]Grade, error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {

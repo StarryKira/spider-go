@@ -83,3 +83,5 @@ func (h *UserController) GetUserInfo(c *gin.Context) {
 	}
 	dto.Success(c, user)
 }
+
+//todo 上传头像，更新头像，使用阿里云oss存储

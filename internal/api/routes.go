@@ -22,5 +22,6 @@ func SetupRoutes(r *gin.Engine, uc *controller.UserController, gc *controller.Gr
 	user.GET("/info", uc.GetUserInfo)           //获取用户信息
 	user.GET("/grades/all", gc.GetAllGrade)     //获取全部成绩
 	user.GET("/grades/term", gc.GetGradeByTerm) //根据学期获取成绩
+	user.GET("/grades/level", gc.GetLevelGrade) //获取等级考试成绩
 
 }

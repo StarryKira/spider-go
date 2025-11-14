@@ -16,6 +16,10 @@ type GradeResponse struct {
 	GPA       service.GPA     `json:"gpa"`
 	GradeList []service.Grade `json:"grades"`
 }
+type LevelGradeResponse struct {
+	Total     int                  `json:"total"`
+	GradeList []service.LevelGrade `json:"grades"`
+}
 
 func NewGradeController(gradeSvc *service.GradeService) *GradeController {
 	return &GradeController{gradeSvc: gradeSvc}
@@ -58,4 +62,21 @@ func (h *GradeController) GetGradeByTerm(c *gin.Context) {
 		GPA:       *gpa,
 		Total:     len(grades),
 	})
+}
+
+func (h *GradeController) GetLevelGrade(c *gin.Context) {
+	uid, ok := c.Get("uid")
+	if !ok {
+		dto.BadRequest(c, 114514, "invalid token")
+	}
+	LevGrades, err := h.gradeSvc.GetLevelGrades(uid.(int))
+	if err != nil {
+		dto.Error(c, 200, 111, err.Error())
+		return
+	}
+	dto.Success(c, LevelGradeResponse{
+		GradeList: LevGrades,
+		Total:     len(LevGrades),
+	})
+
 }
