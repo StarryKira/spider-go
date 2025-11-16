@@ -9,7 +9,7 @@ import (
 
 var secret = []byte("Haruka")
 
-func SetupRoutes(r *gin.Engine, uc *controller.UserController, gc *controller.GradeController, cc *controller.CourseController) {
+func SetupRoutes(r *gin.Engine, uc *controller.UserController, gc *controller.GradeController, cc *controller.CourseController, ec *controller.ExamController) {
 
 	api := r.Group("/api")
 	// api路由
@@ -27,4 +27,5 @@ func SetupRoutes(r *gin.Engine, uc *controller.UserController, gc *controller.Gr
 
 	user.GET("/course/:week", cc.GetCourseTable) //获取第 week 周的课程表
 
+	user.GET("/exam", ec.GetExams) //根据学期获取考试安排
 }

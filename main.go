@@ -21,8 +21,11 @@ func main() {
 	gradeController := controller.NewGradeController(gradeSvc)
 	courseSvc := service.NewCourseService(userRepo)
 	courseController := controller.NewCourseController(courseSvc)
+	examSvc := service.NewExamService(userRepo)
+	examController := controller.NewExamController(examSvc)
+
 	r := gin.Default()
-	api.SetupRoutes(r, userController, gradeController, courseController)
+	api.SetupRoutes(r, userController, gradeController, courseController, examController)
 
 	if err := app.LoadConfig(); err != nil {
 		log.Fatalf("config error: %v \n", err)

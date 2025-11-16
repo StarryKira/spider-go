@@ -1,5 +1,7 @@
 package utils
 
+//所有链接按需取用，用webVPN就注释校园网内的，用校园网内的就注销webVPN的
+
 // 教务管理系统 下面那个是校园网内的
 //var Jwc_url string = "https://https-authserver-csuft-edu-cn-443.webvpn.csuft.edu.cn/authserver/login?service=https%3A%2F%2Fhttp-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn%2F"
 
@@ -31,8 +33,10 @@ var Grade_level_url string = "http://jwgl.csuft.edu.cn/jsxsd/kscj/djkscj_list"
 // var Course_url = "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/xskb/xskb_list.do"
 var Course_url string = "http://jwgl.csuft.edu.cn/jsxsd/xskb/xskb_list.do"
 
-// 查考试安排
-var Exam_url string = ""
+// 查考试安排 下面的是校园网内的
+var Exam_url = "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/xsks/xsksap_list"
+
+//var Exam_url = "http://jwgl.csuft.edu.cn/jsxsd/xsks/xsksap_list"
 
 // 查电费 电费系统也是个几把，超级性能超级流畅响应超级快
 var Electric_url string = ""
