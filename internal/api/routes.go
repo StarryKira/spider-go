@@ -9,7 +9,7 @@ import (
 
 var secret = []byte("Haruka")
 
-func SetupRoutes(r *gin.Engine, uc *controller.UserController, gc *controller.GradeController) {
+func SetupRoutes(r *gin.Engine, uc *controller.UserController, gc *controller.GradeController, cc *controller.CourseController) {
 
 	api := r.Group("/api")
 	// api路由
@@ -18,10 +18,13 @@ func SetupRoutes(r *gin.Engine, uc *controller.UserController, gc *controller.Gr
 
 	user := api.Group("/user")
 	user.Use(middleware.AuthMiddleWare(secret))
-	user.POST("/bind", uc.BindJwcAccount)       //绑定校园网账号
-	user.GET("/info", uc.GetUserInfo)           //获取用户信息
+	user.POST("/bind", uc.BindJwcAccount) //绑定校园网账号
+	user.GET("/info", uc.GetUserInfo)     //获取用户信息
+
 	user.GET("/grades/all", gc.GetAllGrade)     //获取全部成绩
 	user.GET("/grades/term", gc.GetGradeByTerm) //根据学期获取成绩
 	user.GET("/grades/level", gc.GetLevelGrade) //获取等级考试成绩
+
+	user.GET("/course/:week", cc.GetCourseTable) //获取第 week 周的课程表
 
 }

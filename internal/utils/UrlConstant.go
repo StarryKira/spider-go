@@ -27,8 +27,9 @@ var Grade_level_url string = "http://jwgl.csuft.edu.cn/jsxsd/kscj/djkscj_list"
 
 //var Grade_level_url string = "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/kscj/djkscj_list"
 
-// 查课表
-var Course_url string = ""
+// 查课表 下面那个是校园网内的
+// var Course_url = "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/xskb/xskb_list.do"
+var Course_url string = "http://jwgl.csuft.edu.cn/jsxsd/xskb/xskb_list.do"
 
 // 查考试安排
 var Exam_url string = ""
