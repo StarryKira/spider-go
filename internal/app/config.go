@@ -10,10 +10,25 @@ type Config struct {
 	App      Appconfig      `yaml:"app" mapstructure:"app"`
 	Database DatabaseConfig `yaml:"database" mapstructure:"database"`
 	Redis    RedisConfig    `yaml:"redis" mapstructure:"redis"`
+	Jwc      JwcConfig      `yaml:"jwc" mapstructure:"jwc"`
+	JWT      JWTConfig      `yaml:"jwt" mapstructure:"jwt"`
 }
 
 type Appconfig struct {
 	Port int `yaml:"port" mapstructure:"port"`
+}
+
+type JwcConfig struct {
+	LoginURL      string `yaml:"login_url" mapstructure:"login_url"`
+	CourseURL     string `yaml:"course_url" mapstructure:"course_url"`
+	GradeURL      string `yaml:"grade_url" mapstructure:"grade_url"`
+	GradeLevelURL string `yaml:"grade_level_url" mapstructure:"grade_level_url"`
+	ExamURL       string `yaml:"exam_url" mapstructure:"exam_url"`
+}
+
+type JWTConfig struct {
+	Secret string `yaml:"secret" mapstructure:"secret"`
+	Issuer string `yaml:"issuer" mapstructure:"issuer"`
 }
 
 type DatabaseConfig struct {
@@ -33,21 +48,32 @@ type RedisConfig struct {
 
 var Conf *Config
 
+// LoadConfig 加载配置（兼容旧代码）
 func LoadConfig() error {
-	viper.AddConfigPath("./config")
+	config, err := LoadConfigFromPath("./config")
+	if err != nil {
+		return err
+	}
+	Conf = config
+	return nil
+}
+
+// LoadConfigFromPath 从指定路径加载配置
+func LoadConfigFromPath(configPath string) (*Config, error) {
+	viper.AddConfigPath(configPath)
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	err := viper.ReadInConfig()
-	if err != nil {
-		return fmt.Errorf("Load config failed: %s \n", err)
-	}
-	Conf = &Config{}
-	err = viper.Unmarshal(Conf)
-	if err != nil {
-		return fmt.Errorf("Unmarshal config failed: %s \n", err)
+
+	if err := viper.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("Load config failed: %s", err)
 	}
 
-	return nil
+	config := &Config{}
+	if err := viper.Unmarshal(config); err != nil {
+		return nil, fmt.Errorf("Unmarshal config failed: %s", err)
+	}
+
+	return config, nil
 }
 
 // GetDSN MySQL

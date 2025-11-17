@@ -1,31 +1,34 @@
 package api
 
 import (
-	"spider-go/internal/handler/controller"
+	"spider-go/internal/app"
 	"spider-go/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
-var secret = []byte("Haruka")
-
-func SetupRoutes(r *gin.Engine, uc *controller.UserController, gc *controller.GradeController, cc *controller.CourseController, ec *controller.ExamController) {
+// SetupRoutes 设置路由
+func SetupRoutes(r *gin.Engine, container *app.Container) {
+	// JWT secret
+	secret := []byte(container.Config.JWT.Secret)
 
 	api := r.Group("/api")
-	// api路由
-	api.POST("/login", uc.Login)
-	api.POST("/register", uc.Register)
+	{
+		// 公开接口
+		api.POST("/login", container.UserController.Login)
+		api.POST("/register", container.UserController.Register)
+	}
 
+	// 需要认证的接口
 	user := api.Group("/user")
 	user.Use(middleware.AuthMiddleWare(secret))
-	user.POST("/bind", uc.BindJwcAccount) //绑定校园网账号
-	user.GET("/info", uc.GetUserInfo)     //获取用户信息
-
-	user.GET("/grades/all", gc.GetAllGrade)     //获取全部成绩
-	user.GET("/grades/term", gc.GetGradeByTerm) //根据学期获取成绩
-	user.GET("/grades/level", gc.GetLevelGrade) //获取等级考试成绩
-
-	user.GET("/course/:week", cc.GetCourseTable) //获取第 week 周的课程表
-
-	user.GET("/exam", ec.GetExams) //根据学期获取考试安排
+	{
+		user.POST("/bind", container.UserController.BindJwcAccount)          // 绑定教务系统账号
+		user.GET("/info", container.UserController.GetUserInfo)              // 获取用户信息
+		user.GET("/grades/all", container.GradeController.GetAllGrade)       // 获取所有成绩
+		user.GET("/grades/term", container.GradeController.GetGradeByTerm)   // 根据学期获取成绩
+		user.GET("/grades/level", container.GradeController.GetLevelGrade)   // 获取等级考试成绩
+		user.GET("/course/:week", container.CourseController.GetCourseTable) // 获取课程表
+		user.GET("/exam", container.ExamController.GetExams)                 // 获取考试安排
+	}
 }

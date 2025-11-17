@@ -11,6 +11,15 @@ redis:
   host: 129.204.200.248:6379
   pass: redis_RZpfr5
   db: 0
+jwt:
+  secret: "your-super-secret-jwt-key-change-this-in-production"
+  issuer: "spider-go"
+jwc:
+  login_url: "https://authserver.csuft.edu.cn/authserver/login?service=http%3A%2F%2Fjwgl.csuft.edu.cn%2F"
+  course_url: "http://jwgl.csuft.edu.cn/jsxsd/xskb/xskb_list.do"
+  grade_url: "http://jwgl.csuft.edu.cn/jsxsd/kscj/cjcx_list"
+  grade_level_url: "http://jwgl.csuft.edu.cn/jsxsd/kscj/djkscj_list"
+  exam_url: "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/xsks/xsksap_list"
 aliyun:
   api_key:
   secret:
