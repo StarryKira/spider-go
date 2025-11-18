@@ -54,7 +54,7 @@ func (h *UserController) Register(c *gin.Context) {
 		return
 	}
 
-	if err := h.userSvc.Register(c.Request.Context(), req.Name, req.Email, req.Password); err != nil {
+	if err := h.userSvc.Register(c.Request.Context(), req.Name, req.Email, req.Captcha, req.Password); err != nil {
 		if appErr, ok := err.(*common.AppError); ok {
 			common.ErrorWithAppError(c, appErr)
 		} else {
@@ -112,4 +112,17 @@ func (h *UserController) GetUserInfo(c *gin.Context) {
 	}
 
 	common.Success(c, user)
+}
+
+func (h *UserController) ResetPassword(c *gin.Context) {
+	req := dto.ResetPasswordRequest{}
+	if err := h.userSvc.ResetPassword(c.Request.Context(), req.Email, req.Password, req.Captcha); err != nil {
+		if appErr, ok := err.(*common.AppError); ok {
+			common.ErrorWithAppError(c, appErr)
+		} else {
+			common.Error(c, common.CodeInternalError, "重置失败")
+		}
+		return
+	}
+	common.Success(c, gin.H{"message": "重置成功"})
 }

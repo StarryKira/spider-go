@@ -35,7 +35,7 @@ func main() {
 	port := container.Config.App.Port
 	addr := ":" + strconv.Itoa(port)
 
-	log.Printf("服务器启动在端口: %d", port)
+	log.Printf("服务器启动在端口: %d\n", port)
 
 	// 5. 优雅关闭
 	go func() {

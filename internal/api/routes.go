@@ -17,6 +17,10 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 		// 公开接口
 		api.POST("/login", container.UserController.Login)
 		api.POST("/register", container.UserController.Register)
+		api.POST("/reset", container.UserController.ResetPassword)
+
+		// 验证码接口（公开）
+		api.POST("/captcha/send", container.CaptchaController.SendEmailCaptcha) // 发送验证码
 	}
 
 	// 需要认证的接口

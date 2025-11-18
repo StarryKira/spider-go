@@ -7,11 +7,12 @@ import (
 )
 
 type Config struct {
-	App      Appconfig      `yaml:"app" mapstructure:"app"`
-	Database DatabaseConfig `yaml:"database" mapstructure:"database"`
-	Redis    RedisConfig    `yaml:"redis" mapstructure:"redis"`
-	Jwc      JwcConfig      `yaml:"jwc" mapstructure:"jwc"`
-	JWT      JWTConfig      `yaml:"jwt" mapstructure:"jwt"`
+	App      Appconfig          `yaml:"app" mapstructure:"app"`
+	Database DatabaseConfig     `yaml:"database" mapstructure:"database"`
+	Redis    RedisClusterConfig `yaml:"redis" mapstructure:"redis"`
+	Jwc      JwcConfig          `yaml:"jwc" mapstructure:"jwc"`
+	JWT      JWTConfig          `yaml:"jwt" mapstructure:"jwt"`
+	Email    EmailConfig        `yaml:"email" mapstructure:"email"`
 }
 
 type Appconfig struct {
@@ -31,6 +32,15 @@ type JWTConfig struct {
 	Issuer string `yaml:"issuer" mapstructure:"issuer"`
 }
 
+// EmailConfig 邮件服务配置
+type EmailConfig struct {
+	SMTPHost string `yaml:"smtp_host" mapstructure:"smtp_host"` // SMTP 服务器地址
+	SMTPPort int    `yaml:"smtp_port" mapstructure:"smtp_port"` // SMTP 端口
+	Username string `yaml:"username" mapstructure:"username"`   // 发件人邮箱
+	Password string `yaml:"password" mapstructure:"password"`   // SMTP 授权码
+	FromName string `yaml:"from_name" mapstructure:"from_name"` // 发件人名称
+}
+
 type DatabaseConfig struct {
 	Host string `yaml:"source" mapstructure:"source"`
 	Port int    `yaml:"port" mapstructure:"port"`
@@ -39,6 +49,7 @@ type DatabaseConfig struct {
 	Name string `yaml:"name" mapstructure:"name"`
 }
 
+// RedisConfig 单个 Redis 数据库配置
 type RedisConfig struct {
 	Host string `yaml:"host" mapstructure:"host"`
 	Port int    `yaml:"port" mapstructure:"port"`
@@ -46,17 +57,13 @@ type RedisConfig struct {
 	DB   int    `yaml:"db" mapstructure:"db"`
 }
 
-var Conf *Config
-
-// LoadConfig 加载配置（兼容旧代码）
-func LoadConfig() error {
-	config, err := LoadConfigFromPath("./config")
-	if err != nil {
-		return err
-	}
-	Conf = config
-	return nil
+// RedisClusterConfig Redis 集群配置（同一个 Redis 服务器的不同数据库）
+type RedisClusterConfig struct {
+	Session RedisConfig `yaml:"session" mapstructure:"session"` // DB 0: 用户会话缓存
+	Captcha RedisConfig `yaml:"captcha" mapstructure:"captcha"` // DB 1: 验证码存储
 }
+
+var Conf *Config
 
 // LoadConfigFromPath 从指定路径加载配置
 func LoadConfigFromPath(configPath string) (*Config, error) {

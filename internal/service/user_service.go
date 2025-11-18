@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"spider-go/internal/cache"
 	"spider-go/internal/common"
 	"spider-go/internal/model"
 	"spider-go/internal/repository"
@@ -16,17 +18,21 @@ type UserService interface {
 	// UserLogin 用户登录
 	UserLogin(ctx context.Context, email, password string) (string, error)
 	// Register 用户注册
-	Register(ctx context.Context, name, email, password string) error
+	Register(ctx context.Context, name, email, captcha, password string) error
 	// Bind 绑定教务系统账号
 	Bind(ctx context.Context, uid int, sid, spwd string) error
 	// GetUserInfo 获取用户信息
 	GetUserInfo(ctx context.Context, uid int) (*model.User, error)
+	// ResetPassword 使用验证码修改密码
+	ResetPassword(ctx context.Context, email string, sid, password string) error
 }
 
 // userServiceImpl 用户服务实现
 type userServiceImpl struct {
 	userRepo       repository.UserRepository
 	sessionService SessionService
+	captchaService CaptchaService
+	captchaCache   cache.CaptchaCache
 	jwtSecret      []byte
 	jwtIssuer      string
 	jwtExpire      time.Duration
@@ -36,12 +42,16 @@ type userServiceImpl struct {
 func NewUserService(
 	userRepo repository.UserRepository,
 	sessionService SessionService,
+	captchaService CaptchaService,
+	captchaCache cache.CaptchaCache,
 	jwtSecret string,
 	jwtIssuer string,
 ) UserService {
 	return &userServiceImpl{
 		userRepo:       userRepo,
 		sessionService: sessionService,
+		captchaService: captchaService,
+		captchaCache:   captchaCache,
 		jwtSecret:      []byte(jwtSecret),
 		jwtIssuer:      jwtIssuer,
 		jwtExpire:      168 * time.Hour, // 7天
@@ -87,13 +97,20 @@ func (s *userServiceImpl) UserLogin(ctx context.Context, email, password string)
 }
 
 // Register 用户注册
-func (s *userServiceImpl) Register(ctx context.Context, name, email, password string) error {
+func (s *userServiceImpl) Register(ctx context.Context, name, email, captcha, password string) error {
 	// 检查用户是否已存在
 	_, err := s.userRepo.GetUserByEmail(email)
 	if err == nil {
 		return common.NewAppError(common.CodeUserAlreadyExists, "邮箱已被注册")
 	}
-
+	//验证验证码
+	redisCaptcha, err := s.captchaCache.GetCaptcha(ctx, email)
+	if err != nil {
+		return common.NewAppError(common.CodeCaptchaInvalid, "验证码无效")
+	}
+	if captcha != redisCaptcha {
+		return common.NewAppError(common.CodeCaptchaInvalid, "验证码错误")
+	}
 	// 加密密码
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -147,4 +164,26 @@ func (s *userServiceImpl) GetUserInfo(ctx context.Context, uid int) (*model.User
 	user.Spwd = ""
 
 	return user, nil
+}
+
+func (s *userServiceImpl) ResetPassword(ctx context.Context, email string, password string, captcha string) error {
+	user, err := s.userRepo.GetUserByEmail(email)
+	if err != nil {
+		return common.NewAppError(common.CodeUserNotFound, "用户不存在")
+	}
+	RedisCaptcha, err := s.captchaCache.GetCaptcha(ctx, email)
+	if err != nil {
+		return common.NewAppError(common.CodeCaptchaInvalid, "未发送验证码")
+	}
+	if captcha != RedisCaptcha {
+		return common.NewAppError(common.CodeCaptchaInvalid, "验证码错误")
+	}
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return common.NewAppError(common.CodeInternalError, "密码加密失败")
+	}
+	if errors.Is(err, s.userRepo.UpdatePassword(user.Uid, string(passwordHash))) {
+		return common.NewAppError(common.CodeInternalError, "修改密码失败")
+	}
+	return nil
 }

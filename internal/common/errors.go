@@ -15,6 +15,7 @@ const (
 	CodeUserAlreadyExists = 20002
 	CodeInvalidPassword   = 20003
 	CodeInvalidToken      = 20004
+	CodeCaptchaInvalid    = 20005
 
 	// 教务系统相关错误码
 	CodeJwcNotBound      = 30001
@@ -45,6 +46,7 @@ var errorMessages = map[int]string{
 	CodeJwcRequestFailed:  "教务系统请求失败",
 	CodeJwcParseFailed:    "教务系统数据解析失败",
 	CodeCacheError:        "缓存错误",
+	CodeCaptchaInvalid:    "验证码错误",
 }
 
 // GetErrorMessage 获取错误信息

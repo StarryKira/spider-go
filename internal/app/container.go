@@ -18,58 +18,65 @@ import (
 type Container struct {
 	Config *Config
 	DB     *gorm.DB
-	Redis  *redis.Client
+
+	// Redis 客户端（同一个 Redis 服务器的不同数据库）
+	SessionRedis *redis.Client // 会话 Redis (DB 0)
+	CaptchaRedis *redis.Client // 验证码 Redis (DB 1)
 
 	// Repositories
 	UserRepo repository.UserRepository
 
 	// Caches
 	SessionCache cache.SessionCache
+	CaptchaCache cache.CaptchaCache
 
 	// Services
 	SessionService service.SessionService
 	CrawlerService service.CrawlerService
+	EmailService   service.EmailService
+	CaptchaService service.CaptchaService
 	UserService    service.UserService
 	CourseService  service.CourseService
 	GradeService   service.GradeService
 	ExamService    service.ExamService
 
 	// Controllers
-	UserController   *controller.UserController
-	CourseController *controller.CourseController
-	GradeController  *controller.GradeController
-	ExamController   *controller.ExamController
+	UserController    *controller.UserController
+	CourseController  *controller.CourseController
+	GradeController   *controller.GradeController
+	ExamController    *controller.ExamController
+	CaptchaController *controller.CaptchaController
 }
 
 // NewContainer 创建依赖注入容器
 func NewContainer(configPath string) (*Container, error) {
 	c := &Container{}
 
-	// 1. 加载配置
+	// 加载配置
 	if err := c.initConfig(configPath); err != nil {
 		return nil, fmt.Errorf("初始化配置失败: %w", err)
 	}
 
-	// 2. 初始化数据库
+	// 初始化数据库
 	if err := c.initDB(); err != nil {
 		return nil, fmt.Errorf("初始化数据库失败: %w", err)
 	}
 
-	// 3. 初始化 Redis
+	// 初始化 Redis
 	if err := c.initRedis(); err != nil {
 		return nil, fmt.Errorf("初始化Redis失败: %w", err)
 	}
 
-	// 4. 初始化 Repositories
+	// 初始化 Repositories
 	c.initRepositories()
 
-	// 5. 初始化 Caches
+	// 初始化 Caches
 	c.initCaches()
 
-	// 6. 初始化 Services
+	// 初始化 Services
 	c.initServices()
 
-	// 7. 初始化 Controllers
+	// 初始化 Controllers
 	c.initControllers()
 
 	return c, nil
@@ -95,28 +102,48 @@ func (c *Container) initDB() error {
 	return nil
 }
 
-// initRedis 初始化 Redis
+// initRedis 初始化 Redis（同一个 Redis 服务器的不同数据库）
 func (c *Container) initRedis() error {
-	redisConfig := c.Config.Redis
+	ctx := context.Background()
+
+	// 初始化会话 Redis (DB 0) - 用于存储用户登录会话
+	sessionClient, err := c.createRedisClient(c.Config.Redis.Session)
+	if err != nil {
+		return fmt.Errorf("初始化会话Redis失败: %w", err)
+	}
+	if err := sessionClient.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("会话Redis连接测试失败: %w", err)
+	}
+	c.SessionRedis = sessionClient
+
+	// 初始化验证码 Redis (DB 1) - 用于存储验证码
+	captchaClient, err := c.createRedisClient(c.Config.Redis.Captcha)
+	if err != nil {
+		return fmt.Errorf("初始化验证码Redis失败: %w", err)
+	}
+	if err := captchaClient.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("验证码Redis连接测试失败: %w", err)
+	}
+	c.CaptchaRedis = captchaClient
+
+	return nil
+}
+
+// createRedisClient 创建 Redis 客户端（辅助函数）
+func (c *Container) createRedisClient(config RedisConfig) (*redis.Client, error) {
 	// 如果 Host 已经包含端口，直接使用；否则添加端口
-	addr := redisConfig.Host
-	if redisConfig.Port != 0 && !strings.Contains(addr, ":") {
-		addr = addr + ":" + strconv.Itoa(redisConfig.Port)
+	addr := config.Host
+	if config.Port != 0 && !strings.Contains(addr, ":") {
+		addr = addr + ":" + strconv.Itoa(config.Port)
 	}
 
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
-		Password: redisConfig.Pass,
-		DB:       redisConfig.DB,
+		Password: config.Pass,
+		DB:       config.DB,
 	})
 
-	// 测试连接
-	if err := client.Ping(context.Background()).Err(); err != nil {
-		return err
-	}
-
-	c.Redis = client
-	return nil
+	return client, nil
 }
 
 // initRepositories 初始化 Repositories
@@ -126,7 +153,10 @@ func (c *Container) initRepositories() {
 
 // initCaches 初始化 Caches
 func (c *Container) initCaches() {
-	c.SessionCache = cache.NewRedisSessionCache(c.Redis)
+	// 会话缓存（DB 0）
+	c.SessionCache = cache.NewRedisSessionCache(c.SessionRedis)
+	// 验证码缓存（DB 1）
+	c.CaptchaCache = cache.NewRedisCaptchaCache(c.CaptchaRedis)
 }
 
 // initServices 初始化 Services
@@ -140,10 +170,27 @@ func (c *Container) initServices() {
 	// Crawler Service
 	c.CrawlerService = service.NewHttpCrawlerService()
 
+	// Email Service（邮件服务）
+	c.EmailService = service.NewEmailService(
+		c.Config.Email.SMTPHost,
+		c.Config.Email.SMTPPort,
+		c.Config.Email.Username,
+		c.Config.Email.Password,
+		c.Config.Email.FromName,
+	)
+
+	// Captcha Service（验证码服务）
+	c.CaptchaService = service.NewCaptchaService(
+		c.CaptchaCache,
+		c.EmailService,
+	)
+
 	// User Service
 	c.UserService = service.NewUserService(
 		c.UserRepo,
 		c.SessionService,
+		c.CaptchaService,
+		c.CaptchaCache,
 		c.Config.JWT.Secret,
 		c.Config.JWT.Issuer,
 	)
@@ -180,23 +227,33 @@ func (c *Container) initControllers() {
 	c.CourseController = controller.NewCourseController(c.CourseService)
 	c.GradeController = controller.NewGradeController(c.GradeService)
 	c.ExamController = controller.NewExamController(c.ExamService)
+	c.CaptchaController = controller.NewCaptchaController(c.CaptchaService)
 }
 
 // Close 关闭资源
 func (c *Container) Close() error {
-	if c.Redis != nil {
-		if err := c.Redis.Close(); err != nil {
-			return err
+	// 关闭会话 Redis
+	if c.SessionRedis != nil {
+		if err := c.SessionRedis.Close(); err != nil {
+			return fmt.Errorf("关闭会话Redis失败: %w", err)
 		}
 	}
 
+	// 关闭验证码 Redis
+	if c.CaptchaRedis != nil {
+		if err := c.CaptchaRedis.Close(); err != nil {
+			return fmt.Errorf("关闭验证码Redis失败: %w", err)
+		}
+	}
+
+	// 关闭数据库
 	if c.DB != nil {
 		sqlDB, err := c.DB.DB()
 		if err != nil {
-			return err
+			return fmt.Errorf("获取数据库连接失败: %w", err)
 		}
 		if err := sqlDB.Close(); err != nil {
-			return err
+			return fmt.Errorf("关闭数据库失败: %w", err)
 		}
 	}
 
