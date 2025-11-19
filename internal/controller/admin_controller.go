@@ -23,7 +23,7 @@ func NewAdminController(adminSvc service.AdminService) *AdminController {
 func (h *AdminController) Login(c *gin.Context) {
 	var req dto.AdminLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.NewAppError(common.CodeInvalidParams, "参数错误")
+		common.Error(c, common.CodeInvalidParams, "参数错误")
 		return
 	}
 
