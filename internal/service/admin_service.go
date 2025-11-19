@@ -19,6 +19,8 @@ type AdminService interface {
 	GetAdminInfo(ctx context.Context, uid int) (*model.Administrator, error)
 	// InitDefaultAdmin 初始化默认管理员（如果不存在）
 	InitDefaultAdmin() error
+	// ResetPassword 重置管理员密码，需要管理员登录
+	ResetPassword(ctx context.Context, email string, password string) error
 }
 
 // adminServiceImpl 管理员服务实现
@@ -117,10 +119,26 @@ func (s *adminServiceImpl) InitDefaultAdmin() error {
 
 	admin := &model.Administrator{
 		Email:     "admin@spider-go.com",
-		Name:      "管理员",
+		Name:      "Haruka",
 		Password:  string(passwordHash),
 		CreatedAt: time.Now(),
 	}
 
 	return s.adminRepo.CreateAdmin(admin)
+}
+
+func (s *adminServiceImpl) ResetPassword(ctx context.Context, email string, password string) error {
+	admin, err := s.adminRepo.GetAdminByEmail(email)
+	if err != nil {
+		return common.NewAppError(common.CodeUserNotFound, "没有这个管理员")
+	}
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return common.NewAppError(common.CodeInternalError, err.Error())
+	}
+	admin.Password = string(passwordHash)
+	if err = s.adminRepo.UpdateAdminPassword(email, admin.Password); err != nil {
+		return common.NewAppError(common.CodeInternalError, err.Error())
+	}
+	return nil
 }

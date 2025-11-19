@@ -16,11 +16,18 @@ type AdminRepository interface {
 	CreateAdmin(admin *model.Administrator) error
 	// CheckAdminExists 检查管理员是否存在
 	CheckAdminExists() (bool, error)
+	//
+	UpdateAdminPassword(email string, password string) error
 }
 
 // gormAdminRepository GORM 实现的管理员仓储
 type gormAdminRepository struct {
 	db *gorm.DB
+}
+
+func (r *gormAdminRepository) UpdateAdminPassword(email string, password string) error {
+	err := r.db.Model(&model.Administrator{}).Where("email=?", email).Update("password", password).Error
+	return err
 }
 
 // NewGormAdminRepository 创建 GORM 管理员仓储

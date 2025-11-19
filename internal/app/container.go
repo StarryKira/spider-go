@@ -32,29 +32,33 @@ type Container struct {
 	SessionCache cache.SessionCache
 	CaptchaCache cache.CaptchaCache
 	DAUCache     cache.DAUCache
+	ConfigCache  cache.ConfigCache
 
 	// Services
-	SessionService service.SessionService
-	CrawlerService service.CrawlerService
-	EmailService   service.EmailService
-	CaptchaService service.CaptchaService
-	DAUService     service.DAUService
-	AdminService   service.AdminService
-	NoticeService  service.NoticeService
-	UserService    service.UserService
-	CourseService  service.CourseService
-	GradeService   service.GradeService
-	ExamService    service.ExamService
+	SessionService        service.SessionService
+	CrawlerService        service.CrawlerService
+	EmailService          service.EmailService
+	CaptchaService        service.CaptchaService
+	DAUService            service.DAUService
+	AdminService          service.AdminService
+	NoticeService         service.NoticeService
+	UserService           service.UserService
+	CourseService         service.CourseService
+	GradeService          service.GradeService
+	ExamService           service.ExamService
+	GradeAnalysisService  service.GradeAnalysisService
 
 	// Controllers
-	UserController       *controller.UserController
-	CourseController     *controller.CourseController
-	GradeController      *controller.GradeController
-	ExamController       *controller.ExamController
-	CaptchaController    *controller.CaptchaController
-	StatisticsController *controller.StatisticsController
-	AdminController      *controller.AdminController
-	NoticeController     *controller.NoticeController
+	UserController          *controller.UserController
+	CourseController        *controller.CourseController
+	GradeController         *controller.GradeController
+	ExamController          *controller.ExamController
+	CaptchaController       *controller.CaptchaController
+	StatisticsController    *controller.StatisticsController
+	AdminController         *controller.AdminController
+	NoticeController        *controller.NoticeController
+	GradeAnalysisController *controller.GradeAnalysisController
+	ConfigController        *controller.ConfigController
 }
 
 // NewContainer 创建依赖注入容器
@@ -175,6 +179,8 @@ func (c *Container) initCaches() {
 	c.CaptchaCache = cache.NewRedisCaptchaCache(c.CaptchaRedis)
 	// 日活统计缓存（DB 0，与会话共用）
 	c.DAUCache = cache.NewRedisDAUCache(c.SessionRedis)
+	// 系统配置缓存（DB 0，与会话共用）
+	c.ConfigCache = cache.NewRedisConfigCache(c.SessionRedis)
 }
 
 // initServices 初始化 Services
@@ -251,6 +257,12 @@ func (c *Container) initServices() {
 		c.CrawlerService,
 		c.Config.Jwc.ExamURL,
 	)
+
+	// Grade Analysis Service（成绩分析服务）
+	c.GradeAnalysisService = service.NewGradeAnalysisService(
+		c.GradeService,
+		c.ConfigCache,
+	)
 }
 
 // initControllers 初始化 Controllers
@@ -263,6 +275,8 @@ func (c *Container) initControllers() {
 	c.StatisticsController = controller.NewStatisticsController(c.DAUService)
 	c.AdminController = controller.NewAdminController(c.AdminService)
 	c.NoticeController = controller.NewNoticeController(c.NoticeService)
+	c.GradeAnalysisController = controller.NewGradeAnalysisController(c.GradeAnalysisService)
+	c.ConfigController = controller.NewConfigController(c.ConfigCache)
 }
 
 // Close 关闭资源

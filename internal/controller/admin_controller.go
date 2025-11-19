@@ -23,7 +23,7 @@ func NewAdminController(adminSvc service.AdminService) *AdminController {
 func (h *AdminController) Login(c *gin.Context) {
 	var req dto.AdminLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		common.Error(c, common.CodeInvalidParams, "参数错误")
+		common.NewAppError(common.CodeInvalidParams, "参数错误")
 		return
 	}
 
@@ -65,4 +65,22 @@ func (h *AdminController) GetInfo(c *gin.Context) {
 	}
 
 	common.Success(c, admin)
+}
+
+func (h *AdminController) ChangePwd(c *gin.Context) {
+	req := dto.AdminLoginRequest{}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Error(c, common.CodeInvalidParams, err.Error())
+	}
+	_, ok := c.Get("admin_uid")
+	if !ok {
+		common.Error(c, common.CodeUnauthorized, "未授权")
+	}
+	err := h.adminSvc.ResetPassword(c.Request.Context(), req.Email, req.Password)
+	if err != nil {
+		common.Error(c, common.CodeInternalError, err.Error())
+		return
+	}
+	common.Success(c, gin.H{"message": "重置成功"})
+	return
 }

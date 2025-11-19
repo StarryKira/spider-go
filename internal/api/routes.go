@@ -24,19 +24,23 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 
 		// 通知接口（公开 - 查看）
 		api.GET("/notices", container.NoticeController.GetVisibleNotices) // 获取可见通知
+
+		// 系统配置（公开 - 查看）
+		api.GET("/config/term", container.ConfigController.GetCurrentTerm) // 获取当前学期
 	}
 
 	// 需要认证的接口（普通用户）
 	user := api.Group("/user")
 	user.Use(middleware.AuthMiddleWare(secret, container.DAUService))
 	{
-		user.POST("/bind", container.UserController.BindJwcAccount)          // 绑定教务系统账号
-		user.GET("/info", container.UserController.GetUserInfo)              // 获取用户信息
-		user.GET("/grades/all", container.GradeController.GetAllGrade)       // 获取所有成绩
-		user.GET("/grades/term", container.GradeController.GetGradeByTerm)   // 根据学期获取成绩
-		user.GET("/grades/level", container.GradeController.GetLevelGrade)   // 获取等级考试成绩
-		user.GET("/course/:week", container.CourseController.GetCourseTable) // 获取课程表
-		user.GET("/exam", container.ExamController.GetExams)                 // 获取考试安排
+		user.POST("/bind", container.UserController.BindJwcAccount)                            // 绑定教务系统账号
+		user.GET("/info", container.UserController.GetUserInfo)                                // 获取用户信息
+		user.GET("/grades/all", container.GradeController.GetAllGrade)                         // 获取所有成绩
+		user.GET("/grades/term", container.GradeController.GetGradeByTerm)                     // 根据学期获取成绩
+		user.GET("/grades/level", container.GradeController.GetLevelGrade)                     // 获取等级考试成绩
+		user.GET("/course/:week", container.CourseController.GetCourseTable)                   // 获取课程表
+		user.GET("/exam", container.ExamController.GetExams)                                   // 获取考试安排
+		user.GET("/grades/analysis", container.GradeAnalysisController.GetRecentTermsAnalysis) // 获取成绩分析
 	}
 
 	// 管理员接口
@@ -51,7 +55,7 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 		{
 			// 管理员信息
 			adminAuth.GET("/info", container.AdminController.GetInfo)
-
+			adminAuth.POST("/reset", container.AdminController.ChangePwd)
 			// 通知管理
 			adminAuth.POST("/notices", container.NoticeController.CreateNotice)        // 创建通知
 			adminAuth.PUT("/notices/:nid", container.NoticeController.UpdateNotice)    // 更新通知
@@ -61,6 +65,9 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 			// 日活统计（仅管理员）
 			adminAuth.GET("/statistics/dau", container.StatisticsController.GetDAUStatistics)  // 获取日活统计
 			adminAuth.GET("/statistics/dau/range", container.StatisticsController.GetDAURange) // 获取日活范围统计
+
+			// 系统配置（仅管理员）
+			adminAuth.POST("/config/term", container.ConfigController.SetCurrentTerm) // 设置当前学期
 		}
 	}
 }
