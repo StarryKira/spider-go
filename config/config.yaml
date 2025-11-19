@@ -31,6 +31,6 @@ email:
   # SMTP 邮件服务器配置
   smtp_host: "smtp.qq.com"          # QQ邮箱
   smtp_port: 465
-  username: ""     # 发件人邮箱
-  password: ""    # SMTP 授权码（不是邮箱密码）
+  username: "1628615876@qq.com"     # 发件人邮箱
+  password: "kwxuotnueozvdjeb"    # SMTP 授权码（不是邮箱密码）
   from_name: "Spider-Go 验证码"      # 发件人名称

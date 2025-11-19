@@ -115,7 +115,11 @@ func (h *UserController) GetUserInfo(c *gin.Context) {
 }
 
 func (h *UserController) ResetPassword(c *gin.Context) {
-	req := dto.ResetPasswordRequest{}
+	var req = dto.ResetPasswordRequest{}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Error(c, common.CodeInvalidParams, "参数错误")
+		return
+	}
 	if err := h.userSvc.ResetPassword(c.Request.Context(), req.Email, req.Password, req.Captcha); err != nil {
 		if appErr, ok := err.(*common.AppError); ok {
 			common.ErrorWithAppError(c, appErr)

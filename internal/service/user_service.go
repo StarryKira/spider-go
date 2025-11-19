@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"spider-go/internal/cache"
 	"spider-go/internal/common"
 	"spider-go/internal/model"
@@ -104,12 +103,9 @@ func (s *userServiceImpl) Register(ctx context.Context, name, email, captcha, pa
 		return common.NewAppError(common.CodeUserAlreadyExists, "邮箱已被注册")
 	}
 	//验证验证码
-	redisCaptcha, err := s.captchaCache.GetCaptcha(ctx, email)
+	err = s.captchaService.VerifyEmailCaptcha(ctx, email, captcha)
 	if err != nil {
-		return common.NewAppError(common.CodeCaptchaInvalid, "验证码无效")
-	}
-	if captcha != redisCaptcha {
-		return common.NewAppError(common.CodeCaptchaInvalid, "验证码错误")
+		return common.NewAppError(common.CodeCaptchaInvalid, err.Error())
 	}
 	// 加密密码
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -171,18 +167,15 @@ func (s *userServiceImpl) ResetPassword(ctx context.Context, email string, passw
 	if err != nil {
 		return common.NewAppError(common.CodeUserNotFound, "用户不存在")
 	}
-	RedisCaptcha, err := s.captchaCache.GetCaptcha(ctx, email)
+	err = s.captchaService.VerifyEmailCaptcha(ctx, email, captcha)
 	if err != nil {
-		return common.NewAppError(common.CodeCaptchaInvalid, "未发送验证码")
-	}
-	if captcha != RedisCaptcha {
-		return common.NewAppError(common.CodeCaptchaInvalid, "验证码错误")
+		return common.NewAppError(common.CodeInternalError, err.Error())
 	}
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return common.NewAppError(common.CodeInternalError, "密码加密失败")
 	}
-	if errors.Is(err, s.userRepo.UpdatePassword(user.Uid, string(passwordHash))) {
+	if err := s.userRepo.UpdatePassword(user.Uid, string(passwordHash)); err != nil {
 		return common.NewAppError(common.CodeInternalError, "修改密码失败")
 	}
 	return nil

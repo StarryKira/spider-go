@@ -19,7 +19,7 @@ func InitDBWithConfig(config *Config) (*gorm.DB, error) {
 	}
 
 	// 自动迁移
-	if err := db.AutoMigrate(&model.User{}); err != nil {
+	if err := db.AutoMigrate(&model.User{}, &model.Notice{}, &model.Administrator{}); err != nil {
 		return nil, err
 	}
 
