@@ -24,28 +24,37 @@ type Container struct {
 	CaptchaRedis *redis.Client // 验证码 Redis (DB 1)
 
 	// Repositories
-	UserRepo repository.UserRepository
+	UserRepo   repository.UserRepository
+	AdminRepo  repository.AdminRepository
+	NoticeRepo repository.NoticeRepository
 
 	// Caches
 	SessionCache cache.SessionCache
 	CaptchaCache cache.CaptchaCache
+	DAUCache     cache.DAUCache
 
 	// Services
 	SessionService service.SessionService
 	CrawlerService service.CrawlerService
 	EmailService   service.EmailService
 	CaptchaService service.CaptchaService
+	DAUService     service.DAUService
+	AdminService   service.AdminService
+	NoticeService  service.NoticeService
 	UserService    service.UserService
 	CourseService  service.CourseService
 	GradeService   service.GradeService
 	ExamService    service.ExamService
 
 	// Controllers
-	UserController    *controller.UserController
-	CourseController  *controller.CourseController
-	GradeController   *controller.GradeController
-	ExamController    *controller.ExamController
-	CaptchaController *controller.CaptchaController
+	UserController       *controller.UserController
+	CourseController     *controller.CourseController
+	GradeController      *controller.GradeController
+	ExamController       *controller.ExamController
+	CaptchaController    *controller.CaptchaController
+	StatisticsController *controller.StatisticsController
+	AdminController      *controller.AdminController
+	NoticeController     *controller.NoticeController
 }
 
 // NewContainer 创建依赖注入容器
@@ -78,6 +87,11 @@ func NewContainer(configPath string) (*Container, error) {
 
 	// 初始化 Controllers
 	c.initControllers()
+
+	// 初始化默认管理员（如果不存在）
+	if err := c.AdminService.InitDefaultAdmin(); err != nil {
+		return nil, fmt.Errorf("初始化默认管理员失败: %w", err)
+	}
 
 	return c, nil
 }
@@ -149,6 +163,8 @@ func (c *Container) createRedisClient(config RedisConfig) (*redis.Client, error)
 // initRepositories 初始化 Repositories
 func (c *Container) initRepositories() {
 	c.UserRepo = repository.NewGormUserRepository(c.DB)
+	c.AdminRepo = repository.NewGormAdminRepository(c.DB)
+	c.NoticeRepo = repository.NewGormNoticeRepository(c.DB)
 }
 
 // initCaches 初始化 Caches
@@ -157,6 +173,8 @@ func (c *Container) initCaches() {
 	c.SessionCache = cache.NewRedisSessionCache(c.SessionRedis)
 	// 验证码缓存（DB 1）
 	c.CaptchaCache = cache.NewRedisCaptchaCache(c.CaptchaRedis)
+	// 日活统计缓存（DB 0，与会话共用）
+	c.DAUCache = cache.NewRedisDAUCache(c.SessionRedis)
 }
 
 // initServices 初始化 Services
@@ -185,12 +203,26 @@ func (c *Container) initServices() {
 		c.EmailService,
 	)
 
+	// DAU Service（日活统计服务）
+	c.DAUService = service.NewDAUService(c.DAUCache)
+
+	// Admin Service（管理员服务）
+	c.AdminService = service.NewAdminService(
+		c.AdminRepo,
+		c.Config.JWT.Secret,
+		c.Config.JWT.Issuer,
+	)
+
+	// Notice Service（通知服务）
+	c.NoticeService = service.NewNoticeService(c.NoticeRepo)
+
 	// User Service
 	c.UserService = service.NewUserService(
 		c.UserRepo,
 		c.SessionService,
 		c.CaptchaService,
 		c.CaptchaCache,
+		c.DAUService,
 		c.Config.JWT.Secret,
 		c.Config.JWT.Issuer,
 	)
@@ -228,6 +260,9 @@ func (c *Container) initControllers() {
 	c.GradeController = controller.NewGradeController(c.GradeService)
 	c.ExamController = controller.NewExamController(c.ExamService)
 	c.CaptchaController = controller.NewCaptchaController(c.CaptchaService)
+	c.StatisticsController = controller.NewStatisticsController(c.DAUService)
+	c.AdminController = controller.NewAdminController(c.AdminService)
+	c.NoticeController = controller.NewNoticeController(c.NoticeService)
 }
 
 // Close 关闭资源

@@ -32,6 +32,7 @@ type userServiceImpl struct {
 	sessionService SessionService
 	captchaService CaptchaService
 	captchaCache   cache.CaptchaCache
+	dauService     DAUService
 	jwtSecret      []byte
 	jwtIssuer      string
 	jwtExpire      time.Duration
@@ -43,6 +44,7 @@ func NewUserService(
 	sessionService SessionService,
 	captchaService CaptchaService,
 	captchaCache cache.CaptchaCache,
+	dauService DAUService,
 	jwtSecret string,
 	jwtIssuer string,
 ) UserService {
@@ -51,6 +53,7 @@ func NewUserService(
 		sessionService: sessionService,
 		captchaService: captchaService,
 		captchaCache:   captchaCache,
+		dauService:     dauService,
 		jwtSecret:      []byte(jwtSecret),
 		jwtIssuer:      jwtIssuer,
 		jwtExpire:      168 * time.Hour, // 7天
@@ -74,6 +77,9 @@ func (s *userServiceImpl) UserLogin(ctx context.Context, email, password string)
 	if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)) != nil {
 		return "", common.NewAppError(common.CodeInvalidPassword, "用户不存在或密码错误")
 	}
+
+	// 记录用户活跃（日活统计）
+	_ = s.dauService.RecordUserActivity(ctx, user.Uid)
 
 	// 生成 JWT token
 	claims := Claims{
