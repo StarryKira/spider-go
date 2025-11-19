@@ -9,7 +9,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func AuthAdminMiddleWare(secret []byte) gin.HandlerFunc {
+// AdminAuthMiddleware 管理员认证中间件
+func AdminAuthMiddleware(secret []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.Request.Header.Get("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
@@ -19,7 +20,7 @@ func AuthAdminMiddleWare(secret []byte) gin.HandlerFunc {
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		token, err := jwt.ParseWithClaims(tokenString, &service.Claims{}, func(token *jwt.Token) (any, error) {
+		token, err := jwt.ParseWithClaims(tokenString, &service.AdminClaims{}, func(token *jwt.Token) (any, error) {
 			return secret, nil
 		})
 
@@ -29,16 +30,23 @@ func AuthAdminMiddleWare(secret []byte) gin.HandlerFunc {
 			return
 		}
 
-		claims, ok := token.Claims.(*service.Claims)
+		claims, ok := token.Claims.(*service.AdminClaims)
 		if !ok || !token.Valid {
 			common.Error(c, common.CodeInvalidToken, "令牌无效")
 			c.Abort()
 			return
 		}
 
-		// 将用户信息存入上下文
-		c.Set("uid", claims.Uid)
-		c.Set("username", claims.Name)
+		// 验证是否为管理员
+		if !claims.IsAdmin {
+			common.Error(c, common.CodeForbidden, "需要管理员权限")
+			c.Abort()
+			return
+		}
+
+		// 将管理员信息存入上下文
+		c.Set("admin_uid", claims.Uid)
+		c.Set("admin_name", claims.Name)
 		c.Next()
 	}
 }
