@@ -2,7 +2,6 @@ package controller
 
 import (
 	"spider-go/internal/common"
-	"spider-go/internal/dto"
 	"spider-go/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +17,8 @@ func NewExamController(examSvc service.ExamService) *ExamController {
 	return &ExamController{examSvc: examSvc}
 }
 
-// GetExams 获取考试安排
+// GetExams 获取考试安排（RESTful 规范）
+// 使用 query params 传递参数
 func (h *ExamController) GetExams(c *gin.Context) {
 	uid, ok := c.Get("uid")
 	if !ok {
@@ -26,13 +26,14 @@ func (h *ExamController) GetExams(c *gin.Context) {
 		return
 	}
 
-	var req dto.ExamRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		common.Error(c, common.CodeInvalidParams, "参数错误")
+	// 从 query params 获取学期参数（RESTful 规范）
+	term := c.Query("term")
+	if term == "" {
+		common.Error(c, common.CodeInvalidParams, "term 参数不能为空")
 		return
 	}
 
-	exams, err := h.examSvc.GetAllExams(c.Request.Context(), uid.(int), req.Term)
+	exams, err := h.examSvc.GetAllExams(c.Request.Context(), uid.(int), term)
 	if err != nil {
 		if appErr, ok := err.(*common.AppError); ok {
 			common.ErrorWithAppError(c, appErr)

@@ -68,30 +68,32 @@ func (s *gradeAnalysisServiceImpl) GetRecentTermsGrades(ctx context.Context, uid
 		return nil, err
 	}
 
-	// 3. 按学期分组成绩
+	// 3. 按学期分组成绩（只统计 GPA，不返回具体成绩列表）
 	termsData := make([]TermGradesData, 0)
 	for _, term := range terms {
 		termGrades := s.filterGradesByTerm(allGrades, term)
+
+		var termGPA *GPA
 		if len(termGrades) == 0 {
-			// 如果该学期没有成绩，添加空数据
-			termsData = append(termsData, TermGradesData{
-				Term:   term,
-				Grades: []Grade{},
-				GPA:    &GPA{},
-			})
-			continue
+			// 如果该学期没有成绩，返回空统计
+			termGPA = &GPA{
+				AverageGPA:   0,
+				AverageScore: 0,
+				BasicScore:   0,
+			}
+		} else {
+			// 计算该学期的 GPA
+			var err error
+			termGPA, err = s.calculateTermGPA(termGrades)
+			if err != nil {
+				termGPA = &GPA{}
+			}
 		}
 
-		// 计算该学期的 GPA
-		termGPA, err := s.calculateTermGPA(termGrades)
-		if err != nil {
-			termGPA = &GPA{}
-		}
-
+		// 只添加学期和统计数据，不包含具体成绩列表
 		termsData = append(termsData, TermGradesData{
-			Term:   term,
-			Grades: termGrades,
-			GPA:    termGPA,
+			Term: term,
+			GPA:  termGPA,
 		})
 	}
 
@@ -129,43 +131,76 @@ func (s *gradeAnalysisServiceImpl) calculateTermGPA(grades []Grade) (*GPA, error
 func (s *gradeAnalysisServiceImpl) analyzeTrend(termsData []TermGradesData) *TrendAnalysis {
 	if len(termsData) < 2 {
 		return &TrendAnalysis{
-			GPATrend:   "数据不足",
-			ScoreTrend: "数据不足",
+			GPATrend:     "数据不足",
+			ScoreTrend:   "数据不足",
+			BestTerm:     "",
+			BestTermGPA:  0,
+			WorstTerm:    "",
+			WorstTermGPA: 0,
 		}
 	}
 
 	// 找出最好和最差的学期
 	var bestTerm, worstTerm string
-	var bestGPA, worstGPA float64 = -1, 999
+	var bestGPA, worstGPA float64 = 0, 999.0
+	firstValidGPA := true
 
 	gpas := make([]float64, 0)
 	for _, data := range termsData {
-		if len(data.Grades) == 0 {
+		// 检查该学期是否有有效的 GPA 数据
+		if data.GPA == nil || (data.GPA.AverageGPA == 0 && data.GPA.AverageScore == 0) {
 			continue
 		}
+
 		gpa := data.GPA.AverageGPA
 		gpas = append(gpas, gpa)
 
+		// 初始化最好和最差的 GPA
+		if firstValidGPA {
+			bestGPA = gpa
+			worstGPA = gpa
+			bestTerm = data.Term
+			worstTerm = data.Term
+			firstValidGPA = false
+			continue
+		}
+
+		// 更新最好的学期
 		if gpa > bestGPA {
 			bestGPA = gpa
 			bestTerm = data.Term
 		}
+
+		// 更新最差的学期
 		if gpa < worstGPA {
 			worstGPA = gpa
 			worstTerm = data.Term
 		}
 	}
 
-	// 分析趋势
+	// 如果没有有效数据
+	if len(gpas) == 0 {
+		return &TrendAnalysis{
+			GPATrend:     "暂无数据",
+			ScoreTrend:   "暂无数据",
+			BestTerm:     "",
+			BestTermGPA:  0,
+			WorstTerm:    "",
+			WorstTermGPA: 0,
+		}
+	}
+
+	// 分析趋势（比较最近两个学期）
 	gpaTrend := "稳定"
 	scoreTrend := "稳定"
 
 	if len(gpas) >= 2 {
-		// 比较最近两个学期
-		if gpas[0] > gpas[1]+0.1 {
+		// gpas[0] 是当前学期，gpas[1] 是上一学期
+		diff := gpas[0] - gpas[1]
+		if diff > 0.1 {
 			gpaTrend = "上升"
 			scoreTrend = "上升"
-		} else if gpas[0] < gpas[1]-0.1 {
+		} else if diff < -0.1 {
 			gpaTrend = "下降"
 			scoreTrend = "下降"
 		}

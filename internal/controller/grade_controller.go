@@ -2,7 +2,6 @@ package controller
 
 import (
 	"spider-go/internal/common"
-	"spider-go/internal/dto"
 	"spider-go/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -42,21 +41,30 @@ func (h *GradeController) GetAllGrade(c *gin.Context) {
 	})
 }
 
-// GetGradeByTerm 根据学期获取成绩
-func (h *GradeController) GetGradeByTerm(c *gin.Context) {
+// GetGrades 获取成
+// 如果传递 term 参数则查询指定学期，否则查询所有成绩
+func (h *GradeController) GetGrades(c *gin.Context) {
 	uid, ok := c.Get("uid")
 	if !ok {
 		common.Error(c, common.CodeUnauthorized, "未授权")
 		return
 	}
 
-	var req dto.GradeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		common.Error(c, common.CodeInvalidParams, "参数错误")
-		return
+	// 从 query params 获取学期参数（RESTful 规范）
+	term := c.Query("term")
+
+	var grades []service.Grade
+	var gpa *service.GPA
+	var err error
+
+	if term != "" {
+		// 查询指定学期的成绩
+		grades, gpa, err = h.gradeSvc.GetGradeByTerm(c.Request.Context(), uid.(int), term)
+	} else {
+		// 查询所有成绩
+		grades, gpa, err = h.gradeSvc.GetAllGrade(c.Request.Context(), uid.(int))
 	}
 
-	grades, gpa, err := h.gradeSvc.GetGradeByTerm(c.Request.Context(), uid.(int), req.Term)
 	if err != nil {
 		if appErr, ok := err.(*common.AppError); ok {
 			common.ErrorWithAppError(c, appErr)

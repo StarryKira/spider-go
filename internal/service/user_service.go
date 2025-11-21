@@ -164,7 +164,6 @@ func (s *userServiceImpl) GetUserInfo(ctx context.Context, uid int) (*model.User
 	// 清除敏感信息
 	user.Password = ""
 	user.Spwd = ""
-	user.Password = ""
 
 	return user, nil
 }

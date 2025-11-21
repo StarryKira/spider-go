@@ -33,14 +33,17 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 	user := api.Group("/user")
 	user.Use(middleware.AuthMiddleWare(secret, container.DAUService))
 	{
-		user.POST("/bind", container.UserController.BindJwcAccount)                            // 绑定教务系统账号
-		user.GET("/info", container.UserController.GetUserInfo)                                // 获取用户信息
-		user.GET("/grades/all", container.GradeController.GetAllGrade)                         // 获取所有成绩
-		user.GET("/grades/term", container.GradeController.GetGradeByTerm)                     // 根据学期获取成绩
+		user.POST("/bind", container.UserController.BindJwcAccount) // 绑定教务系统账号
+		user.GET("/info", container.UserController.GetUserInfo)     // 获取用户信息
+
+		// 成绩相关接口（RESTful 规范）
+		user.GET("/grades", container.GradeController.GetGrades)                               // 获取成绩（query: term 可选）
 		user.GET("/grades/level", container.GradeController.GetLevelGrade)                     // 获取等级考试成绩
-		user.GET("/course/:week", container.CourseController.GetCourseTable)                   // 获取课程表
-		user.GET("/exam", container.ExamController.GetExams)                                   // 获取考试安排
 		user.GET("/grades/analysis", container.GradeAnalysisController.GetRecentTermsAnalysis) // 获取成绩分析
+
+		// 课程和考试（RESTful 规范）
+		user.GET("/courses", container.CourseController.GetCourses) // 获取课程表（query: week, term）
+		user.GET("/exams", container.ExamController.GetExams)       // 获取考试安排（query: term）
 	}
 
 	// 管理员接口

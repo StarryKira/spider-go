@@ -2,7 +2,6 @@ package controller
 
 import (
 	"spider-go/internal/common"
-	"spider-go/internal/dto"
 	"spider-go/internal/service"
 	"strconv"
 
@@ -19,27 +18,36 @@ func NewCourseController(courseSvc service.CourseService) *CourseController {
 	return &CourseController{courseSvc: courseSvc}
 }
 
-// GetCourseTable 获取课程表
-func (h *CourseController) GetCourseTable(c *gin.Context) {
+// GetCourses 获取课程表（RESTful 规范）
+// 使用 query params 传递参数
+func (h *CourseController) GetCourses(c *gin.Context) {
 	uid, ok := c.Get("uid")
 	if !ok {
 		common.Error(c, common.CodeUnauthorized, "未授权")
 		return
 	}
 
-	var req dto.CourseRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		common.Error(c, common.CodeInvalidParams, "参数错误")
+	// 从 query params 获取参数（RESTful 规范）
+	weekStr := c.Query("week")
+	term := c.Query("term")
+
+	// 验证必填参数
+	if weekStr == "" {
+		common.Error(c, common.CodeInvalidParams, "week 参数不能为空")
+		return
+	}
+	if term == "" {
+		common.Error(c, common.CodeInvalidParams, "term 参数不能为空")
 		return
 	}
 
-	week, err := strconv.Atoi(c.Param("week"))
+	week, err := strconv.Atoi(weekStr)
 	if err != nil {
-		common.Error(c, common.CodeInvalidParams, "周次格式错误")
+		common.Error(c, common.CodeInvalidParams, "week 格式错误")
 		return
 	}
 
-	courseTable, err := h.courseSvc.GetCourseTableByWeek(c.Request.Context(), week, req.Term, uid.(int))
+	courseTable, err := h.courseSvc.GetCourseTableByWeek(c.Request.Context(), week, term, uid.(int))
 	if err != nil {
 		if appErr, ok := err.(*common.AppError); ok {
 			common.ErrorWithAppError(c, appErr)
