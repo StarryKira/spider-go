@@ -234,12 +234,19 @@ Content-Type: application/json
 - 绑定后会清除旧的会话缓存
 - 下次查询成绩时自动登录教务系统
 
-## 7. 获取所有成绩
+## 7. 获取成绩（RESTful 规范）
 
 ### 请求
 
+**获取所有成绩**：
 ```http
-GET /api/user/grades/all
+GET /api/user/grades
+Authorization: Bearer {token}
+```
+
+**按学期获取成绩**：
+```http
+GET /api/user/grades?term=2024-2025-1
 Authorization: Bearer {token}
 ```
 
@@ -264,42 +271,20 @@ Authorization: Bearer {token}
       }
     ],
     "gpa": {
-      "averageGPA": 3.85,
-      "averageScore": 88.5,
-      "basicScore": 87.2
+      "averageGPA": 3.85,      // 平均绩点
+      "averageScore": 88.5,    // 平均分
+      "basicScore": 87.2       // 学业基本分
     }
   }
 }
 ```
 
-## 8. 按学期获取成绩
+**说明**：
+- 不传 `term` 参数：查询所有成绩
+- 传 `term` 参数：查询指定学期成绩
+- 参数通过 query params 传递（符合 RESTful 规范）
 
-### 请求
-
-```http
-GET /api/user/grades/term
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "term": "2024-2025-1"
-}
-```
-
-### 响应
-
-```json
-{
-  "code": 0,
-  "message": "成功",
-  "data": {
-    "grades": [...],
-    "gpa": {...}
-  }
-}
-```
-
-## 9. 获取等级考试成绩
+## 8. 获取等级考试成绩
 
 ### 请求
 
@@ -325,7 +310,7 @@ Authorization: Bearer {token}
 }
 ```
 
-## 10. 获取成绩分析（最近三个学期）
+## 9. 获取成绩分析（最近三个学期）
 
 ### 请求
 
@@ -345,22 +330,27 @@ Authorization: Bearer {token}
     "terms_data": [
       {
         "term": "2024-2025-2",
-        "grades": [...],
         "gpa": {
-          "averageGPA": 3.92,
-          "averageScore": 89.2,
-          "basicScore": 88.5
+          "averageGPA": 3.92,      // 平均绩点
+          "averageScore": 89.2,    // 平均分
+          "basicScore": 88.5       // 学业基本分
         }
       },
       {
         "term": "2024-2025-1",
-        "grades": [...],
-        "gpa": {...}
+        "gpa": {
+          "averageGPA": 3.85,
+          "averageScore": 88.0,
+          "basicScore": 87.0
+        }
       },
       {
         "term": "2023-2024-2",
-        "grades": [...],
-        "gpa": {...}
+        "gpa": {
+          "averageGPA": 3.75,
+          "averageScore": 86.5,
+          "basicScore": 85.8
+        }
       }
     ],
     "overall_gpa": {
@@ -381,25 +371,24 @@ Authorization: Bearer {token}
 ```
 
 **说明**：
+- ⚠️ **不返回具体科目成绩**，只返回统计数据
 - 自动从 Redis 读取当前学期配置
 - 自动计算前两个学期
 - 提供趋势分析和学期对比
+- 保护学生隐私
 
-## 11. 获取课程表
+## 10. 获取课程表（RESTful 规范）
 
 ### 请求
 
 ```http
-GET /api/user/course/5
+GET /api/user/courses?week=5&term=2024-2025-1
 Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "term": "2024-2025-1"
-}
 ```
 
-**说明**：URL 中的 `5` 表示第 5 周
+**参数说明**：
+- `week`: 周次（1-20）
+- `term`: 学期（格式：2024-2025-1）
 
 ### 响应
 
@@ -430,19 +419,17 @@ Content-Type: application/json
 }
 ```
 
-## 12. 获取考试安排
+## 11. 获取考试安排（RESTful 规范）
 
 ### 请求
 
 ```http
-GET /api/user/exam
+GET /api/user/exams?term=2024-2025-1
 Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "term": "2024-2025-1"
-}
 ```
+
+**参数说明**：
+- `term`: 学期（格式：2024-2025-1）
 
 ### 响应
 
@@ -467,7 +454,7 @@ Content-Type: application/json
 
 # 👑 管理员接口
 
-## 13. 管理员登录
+## 12. 管理员登录
 
 ### 请求
 
@@ -497,7 +484,7 @@ Content-Type: application/json
 - 管理员 Token 有效期 24 小时
 - Token 包含 `is_admin: true` 标识
 
-## 14. 获取管理员信息
+## 13. 获取管理员信息
 
 ### 请求
 
@@ -521,7 +508,7 @@ Authorization: Bearer {admin_token}
 }
 ```
 
-## 15. 修改管理员密码
+## 14. 修改管理员密码
 
 ### 请求
 
@@ -552,7 +539,7 @@ Content-Type: application/json
 
 # 📝 通知管理接口
 
-## 16. 创建通知（管理员）
+## 15. 创建通知（管理员）
 
 ### 请求
 
@@ -582,7 +569,7 @@ Content-Type: application/json
 }
 ```
 
-## 17. 更新通知（管理员）
+## 16. 更新通知（管理员）
 
 ### 请求
 
@@ -612,7 +599,7 @@ Content-Type: application/json
 }
 ```
 
-## 18. 删除通知（管理员）
+## 17. 删除通知（管理员）
 
 ### 请求
 
@@ -633,7 +620,7 @@ Authorization: Bearer {admin_token}
 }
 ```
 
-## 19. 获取所有通知（管理员）
+## 18. 获取所有通知（管理员）
 
 ### 请求
 
@@ -663,7 +650,7 @@ Authorization: Bearer {admin_token}
 }
 ```
 
-## 20. 获取可见通知（公开）
+## 19. 获取可见通知（公开）
 
 ### 请求
 
@@ -700,7 +687,7 @@ GET /api/notices
 
 # 📊 统计接口（管理员）
 
-## 21. 获取日活统计
+## 20. 获取日活统计
 
 ### 请求
 
@@ -728,7 +715,7 @@ GET /api/admin/statistics/dau?date=2024-01-20
 }
 ```
 
-## 22. 获取日活范围统计
+## 21. 获取日活范围统计
 
 ### 请求
 
@@ -764,7 +751,7 @@ Authorization: Bearer {admin_token}
 
 # ⚙️ 系统配置接口
 
-## 23. 获取当前学期（公开）
+## 22. 获取当前学期（公开）
 
 ### 请求
 
@@ -784,7 +771,7 @@ GET /api/config/term
 }
 ```
 
-## 24. 设置当前学期（管理员）
+## 23. 设置当前学期（管理员）
 
 ### 请求
 
@@ -839,12 +826,11 @@ Content-Type: application/json
 |------|------|------|
 | POST | `/api/user/bind` | 绑定教务系统 |
 | GET | `/api/user/info` | 获取用户信息 |
-| GET | `/api/user/grades/all` | 获取所有成绩 |
-| GET | `/api/user/grades/term` | 按学期获取成绩 |
+| GET | `/api/user/grades` | 获取成绩（query: term 可选） |
 | GET | `/api/user/grades/level` | 获取等级考试成绩 |
-| GET | `/api/user/grades/analysis` | 获取成绩分析 |
-| GET | `/api/user/course/:week` | 获取课程表 |
-| GET | `/api/user/exam` | 获取考试安排 |
+| GET | `/api/user/grades/analysis` | 获取成绩分析（仅统计） |
+| GET | `/api/user/courses` | 获取课程表（query: week, term） |
+| GET | `/api/user/exams` | 获取考试安排（query: term） |
 
 ## 管理员接口（需要管理员 JWT）
 
@@ -938,13 +924,32 @@ curl -X POST http://localhost:8080/api/login \
   }'
 ```
 
-### 3. 获取用户信息（需要 Token）
+### 3. 获取成绩（需要 Token）
 ```bash
-curl -X GET http://localhost:8080/api/user/info \
+# 获取所有成绩
+curl -X GET http://localhost:8080/api/user/grades \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# 按学期获取成绩（RESTful 规范 - 使用 query params）
+curl -X GET "http://localhost:8080/api/user/grades?term=2024-2025-1" \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 
-### 4. 管理员登录
+### 4. 获取课程表（需要 Token）
+```bash
+# RESTful 规范 - 使用 query params
+curl -X GET "http://localhost:8080/api/user/courses?week=5&term=2024-2025-1" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+### 5. 获取考试安排（需要 Token）
+```bash
+# RESTful 规范 - 使用 query params
+curl -X GET "http://localhost:8080/api/user/exams?term=2024-2025-1" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+### 6. 管理员登录
 ```bash
 curl -X POST http://localhost:8080/api/admin/login \
   -H "Content-Type: application/json" \
@@ -954,7 +959,7 @@ curl -X POST http://localhost:8080/api/admin/login \
   }'
 ```
 
-### 5. 设置当前学期（管理员）
+### 7. 设置当前学期（管理员）
 ```bash
 curl -X POST http://localhost:8080/api/admin/config/term \
   -H "Authorization: Bearer ADMIN_TOKEN_HERE" \
@@ -964,7 +969,7 @@ curl -X POST http://localhost:8080/api/admin/config/term \
   }'
 ```
 
-### 6. 查看日活统计（管理员）
+### 8. 查看日活统计（管理员）
 ```bash
 curl -X GET http://localhost:8080/api/admin/statistics/dau \
   -H "Authorization: Bearer ADMIN_TOKEN_HERE"
@@ -1112,4 +1117,8 @@ return common.NewAppError(common.CodeInvalidParams, "自定义错误信息")
 - 发送邮件
 
 **项目维护者**: Haruka ❤️
+
+
+
+
 
