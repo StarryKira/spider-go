@@ -89,6 +89,8 @@ func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username
 		return common.NewAppError(common.CodeJwcLoginFailed, "登录页缺少必要字段")
 	}
 
+	//TODO 验证码处理
+
 	// 3. 加密密码并提交
 	encryptedPwd := utils.JsCrypto(password, salt)
 
