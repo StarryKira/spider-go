@@ -295,9 +295,6 @@ export SPIDER_REDIS_PASSWORD="your-redis-password"
 - [ ] 添加优雅关闭机制
 - [ ] 添加健康检查接口
 
-## 📄 许可证
-
-MIT License
 
 ## 👥 贡献
 
@@ -308,6 +305,7 @@ MIT License
 如有问题，请通过 Issue 联系。
 
 
-
+## TODO
+根据日活刷新缓存
 
 
