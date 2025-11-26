@@ -10,6 +10,7 @@ import (
 	"spider-go/internal/cache"
 	"spider-go/internal/common"
 	"spider-go/internal/utils"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,15 +32,17 @@ type SessionService interface {
 type jwcSessionService struct {
 	sessionCache cache.SessionCache
 	jwcURL       string
+	captchaURL   string
 	timeout      time.Duration
 	cacheExpire  time.Duration
 }
 
 // NewJwcSessionService 创建教务系统会话服务
-func NewJwcSessionService(sessionCache cache.SessionCache, jwcURL string) SessionService {
+func NewJwcSessionService(sessionCache cache.SessionCache, jwcURL string, captchaURL string) SessionService {
 	return &jwcSessionService{
 		sessionCache: sessionCache,
 		jwcURL:       jwcURL,
+		captchaURL:   captchaURL,
 		timeout:      30 * time.Second,
 		cacheExpire:  time.Hour,
 	}
@@ -88,8 +91,13 @@ func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username
 	if lt == "" || execution == "" || eventID == "" || salt == "" {
 		return common.NewAppError(common.CodeJwcLoginFailed, "登录页缺少必要字段")
 	}
-
+	//处理验证码
 	//TODO 验证码处理
+	isNeedCaptcha, err := client.Get(s.captchaURL + "username=" + username + "&pwdEncrypt2=pwdEncryptSalt" + "&_=" + strconv.FormatInt(time.Now().UnixMilli(), 10))
+	if err != nil {
+		return common.NewAppError(common.CodeJwcLoginFailed, "获取验证码失败")
+	}
+	isNeedCaptcha.Body.Close()
 
 	// 3. 加密密码并提交
 	encryptedPwd := utils.JsCrypto(password, salt)
