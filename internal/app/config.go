@@ -25,7 +25,6 @@ type JwcConfig struct {
 	GradeURL      string `yaml:"grade_url" mapstructure:"grade_url"`
 	GradeLevelURL string `yaml:"grade_level_url" mapstructure:"grade_level_url"`
 	ExamURL       string `yaml:"exam_url" mapstructure:"exam_url"`
-	CaptchaURL    string `yaml:"captcha_url" mapstructure:"captcha_url"`
 }
 
 type JWTConfig struct {

@@ -35,18 +35,18 @@ type Container struct {
 	ConfigCache  cache.ConfigCache
 
 	// Services
-	SessionService       service.SessionService
-	CrawlerService       service.CrawlerService
-	EmailService         service.EmailService
-	CaptchaService       service.CaptchaService
-	DAUService           service.DAUService
-	AdminService         service.AdminService
-	NoticeService        service.NoticeService
-	UserService          service.UserService
-	CourseService        service.CourseService
-	GradeService         service.GradeService
-	ExamService          service.ExamService
-	GradeAnalysisService service.GradeAnalysisService
+	SessionService        service.SessionService
+	CrawlerService        service.CrawlerService
+	EmailService          service.EmailService
+	CaptchaService        service.CaptchaService
+	DAUService            service.DAUService
+	AdminService          service.AdminService
+	NoticeService         service.NoticeService
+	UserService           service.UserService
+	CourseService         service.CourseService
+	GradeService          service.GradeService
+	ExamService           service.ExamService
+	GradeAnalysisService  service.GradeAnalysisService
 
 	// Controllers
 	UserController          *controller.UserController
@@ -189,7 +189,6 @@ func (c *Container) initServices() {
 	c.SessionService = service.NewJwcSessionService(
 		c.SessionCache,
 		c.Config.Jwc.LoginURL,
-		c.Config.Jwc.CaptchaURL,
 	)
 
 	// Crawler Service
