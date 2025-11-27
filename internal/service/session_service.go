@@ -10,6 +10,7 @@ import (
 	"spider-go/internal/cache"
 	"spider-go/internal/common"
 	"spider-go/internal/utils"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,15 +32,17 @@ type SessionService interface {
 type jwcSessionService struct {
 	sessionCache cache.SessionCache
 	jwcURL       string
+	captchaURL   string
 	timeout      time.Duration
 	cacheExpire  time.Duration
 }
 
 // NewJwcSessionService 创建教务系统会话服务
-func NewJwcSessionService(sessionCache cache.SessionCache, jwcURL string) SessionService {
+func NewJwcSessionService(sessionCache cache.SessionCache, jwcURL string, captchaURL string) SessionService {
 	return &jwcSessionService{
 		sessionCache: sessionCache,
 		jwcURL:       jwcURL,
+		captchaURL:   captchaURL,
 		timeout:      30 * time.Second,
 		cacheExpire:  time.Hour,
 	}
@@ -89,9 +92,7 @@ func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username
 		return common.NewAppError(common.CodeJwcLoginFailed, "登录页缺少必要字段")
 	}
 
-	//TODO 验证码处理
-
-	// 3. 加密密码并提交
+	//构造请求体
 	encryptedPwd := utils.JsCrypto(password, salt)
 
 	form := url.Values{}
@@ -103,6 +104,25 @@ func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username
 	form.Set("_eventId", eventID)
 	form.Set("rmShown", rmShown)
 
+	//处理验证码
+	//TODO 验证码处理
+	isNeedCaptcha, err := client.Get(s.captchaURL + "username=" + username + "&pwdEncrypt2=pwdEncryptSalt" + "&_=" + strconv.FormatInt(time.Now().UnixMilli(), 10))
+	if err != nil {
+		return common.NewAppError(common.CodeJwcLoginFailed, "获取验证码失败")
+	}
+	isNeedCaptcha.Body.Close()
+	length := isNeedCaptcha.ContentLength
+	body := make([]byte, length)
+	_, err = isNeedCaptcha.Body.Read(body)
+	if err != nil {
+		return common.NewAppError(common.CodeInternalError, "获取是否需要验证码失败")
+	}
+
+	if string(body) == "true" {
+
+	}
+
+	//提交请求
 	req, err := http.NewRequest("POST", s.jwcURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return common.NewAppError(common.CodeJwcLoginFailed, "构造登录请求失败")
@@ -205,4 +225,8 @@ func (s *jwcSessionService) followGET(client *http.Client, start string, maxHops
 	}
 
 	return nil, cur, errors.New("重定向层级过多")
+}
+
+func (s *jwcSessionService) HandleCaptcha(picBase64 string) (string, error) {
+
 }
