@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -30,21 +32,25 @@ type SessionService interface {
 
 // jwcSessionService 教务系统会话服务实现
 type jwcSessionService struct {
-	sessionCache cache.SessionCache
-	jwcURL       string
-	captchaURL   string
-	timeout      time.Duration
-	cacheExpire  time.Duration
+	sessionCache    cache.SessionCache
+	jwcURL          string
+	captchaURL      string
+	ocrURL          string
+	captchaImageURL string
+	timeout         time.Duration
+	cacheExpire     time.Duration
 }
 
 // NewJwcSessionService 创建教务系统会话服务
-func NewJwcSessionService(sessionCache cache.SessionCache, jwcURL string, captchaURL string) SessionService {
+func NewJwcSessionService(sessionCache cache.SessionCache, jwcURL string, captchaURL string, captchaImageURL string, ocrURL string) SessionService {
 	return &jwcSessionService{
-		sessionCache: sessionCache,
-		jwcURL:       jwcURL,
-		captchaURL:   captchaURL,
-		timeout:      30 * time.Second,
-		cacheExpire:  time.Hour,
+		sessionCache:    sessionCache,
+		jwcURL:          jwcURL,
+		captchaURL:      captchaURL,
+		captchaImageURL: captchaImageURL,
+		ocrURL:          ocrURL,
+		timeout:         30 * time.Second,
+		cacheExpire:     time.Hour,
 	}
 }
 
@@ -105,12 +111,11 @@ func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username
 	form.Set("rmShown", rmShown)
 
 	//处理验证码
-	//TODO 验证码处理
 	isNeedCaptcha, err := client.Get(s.captchaURL + "username=" + username + "&pwdEncrypt2=pwdEncryptSalt" + "&_=" + strconv.FormatInt(time.Now().UnixMilli(), 10))
 	if err != nil {
 		return common.NewAppError(common.CodeJwcLoginFailed, "获取验证码失败")
 	}
-	isNeedCaptcha.Body.Close()
+	defer isNeedCaptcha.Body.Close()
 	length := isNeedCaptcha.ContentLength
 	body := make([]byte, length)
 	_, err = isNeedCaptcha.Body.Read(body)
@@ -119,7 +124,24 @@ func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username
 	}
 
 	if string(body) == "true" {
+		picReq, err := client.Get(s.captchaImageURL + "ts=" + strconv.FormatInt(time.Now().UnixMilli()%1000, 10))
+		if err != nil {
+			return common.NewAppError(common.CodeInternalError, "获取验证码图片失败")
+		}
+		defer picReq.Body.Close()
+		imgBytes, err := io.ReadAll(picReq.Body)
+		if err != nil {
+			return common.NewAppError(common.CodeInternalError, "验证码图片编码失败")
+		}
 
+		// 转换为 Base64
+		base64Str := base64.StdEncoding.EncodeToString(imgBytes)
+		captchaResult, err := s.HandleCaptcha(base64Str)
+		if err != nil {
+			return common.NewAppError(common.CodeInternalError, "识别验证码失败")
+		}
+
+		form.Set("aptchaResponse", captchaResult)
 	}
 
 	//提交请求
@@ -228,5 +250,20 @@ func (s *jwcSessionService) followGET(client *http.Client, start string, maxHops
 }
 
 func (s *jwcSessionService) HandleCaptcha(picBase64 string) (string, error) {
+	data := url.Values{}
+	data.Set("image", picBase64)
+	data.Set("probability", "false")
+	data.Set("png_fix", "false")
 
+	resp, err := http.PostForm(s.ocrURL, data)
+	if err != nil {
+		return "", common.NewAppError(common.CodeInternalError, err.Error())
+	}
+
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	return string(body), nil
 }

@@ -190,6 +190,8 @@ func (c *Container) initServices() {
 		c.SessionCache,
 		c.Config.Jwc.LoginURL,
 		c.Config.Jwc.CaptchaURL,
+		c.Config.Jwc.CaptchaImageURL,
+		c.Config.Ocr.host,
 	)
 
 	// Crawler Service

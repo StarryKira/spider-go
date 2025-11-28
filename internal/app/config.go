@@ -13,6 +13,7 @@ type Config struct {
 	Jwc      JwcConfig          `yaml:"jwc" mapstructure:"jwc"`
 	JWT      JWTConfig          `yaml:"jwt" mapstructure:"jwt"`
 	Email    EmailConfig        `yaml:"email" mapstructure:"email"`
+	Ocr      DdddOCRConfig      `yaml:"ocr" mapstructure:"ocr"`
 }
 
 type Appconfig struct {
@@ -20,12 +21,13 @@ type Appconfig struct {
 }
 
 type JwcConfig struct {
-	LoginURL      string `yaml:"login_url" mapstructure:"login_url"`
-	CourseURL     string `yaml:"course_url" mapstructure:"course_url"`
-	GradeURL      string `yaml:"grade_url" mapstructure:"grade_url"`
-	GradeLevelURL string `yaml:"grade_level_url" mapstructure:"grade_level_url"`
-	ExamURL       string `yaml:"exam_url" mapstructure:"exam_url"`
-	CaptchaURL    string `yaml:"captcha_url" mapstructure:"captcha_url"`
+	LoginURL        string `yaml:"login_url" mapstructure:"login_url"`
+	CourseURL       string `yaml:"course_url" mapstructure:"course_url"`
+	GradeURL        string `yaml:"grade_url" mapstructure:"grade_url"`
+	GradeLevelURL   string `yaml:"grade_level_url" mapstructure:"grade_level_url"`
+	ExamURL         string `yaml:"exam_url" mapstructure:"exam_url"`
+	CaptchaURL      string `yaml:"captcha_url" mapstructure:"captcha_url"`
+	CaptchaImageURL string `yaml:"captcha_image" mapstructure:"captcha_image_url"`
 }
 
 type JWTConfig struct {
@@ -63,6 +65,9 @@ type RedisClusterConfig struct {
 	Session RedisConfig `yaml:"session" mapstructure:"session"` // DB 0: 用户会话缓存
 	Captcha RedisConfig `yaml:"captcha" mapstructure:"captcha"` // DB 1: 验证码存储
 }
+type DdddOCRConfig struct {
+	host string `yaml:"host" mapstructure:"host"`
+}
 
 var Conf *Config
 
@@ -82,12 +87,4 @@ func LoadConfigFromPath(configPath string) (*Config, error) {
 	}
 
 	return config, nil
-}
-
-// GetDSN MySQL
-func GetDSN() string {
-	db := Conf.Database
-	// 格式: user:pass@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		db.User, db.Pass, db.Host, db.Port, db.Name)
 }

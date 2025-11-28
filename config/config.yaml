@@ -26,8 +26,9 @@ jwc:
   course_url: "http://jwgl.csuft.edu.cn/jsxsd/xskb/xskb_list.do"
   grade_url: "http://jwgl.csuft.edu.cn/jsxsd/kscj/cjcx_list"
   grade_level_url: "http://jwgl.csuft.edu.cn/jsxsd/kscj/djkscj_list"
-  exam_url: "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/xsks/xsksap_list"
-  captcha_url: "https://https-authserver-csuft-edu-cn-443.webvpn.csuft.edu.cn/authserver/captcha.html?"
+  exam_url: "http://jwgl.csuft.edu.cn/jsxsd/xsks/xsksap_list"
+  captcha_url: "https://authserver.csuft.edu.cn/authserver/needCaptcha.html?"
+  captcha_image_url: "https://authserver.csuft.edu.cn/authserver/captcha.html?"
 email:
   # SMTP 邮件服务器配置
   smtp_host: "smtp.qq.com"          # QQ邮箱
@@ -36,4 +37,4 @@ email:
   password: "kwxuotnueozvdjeb"    # SMTP 授权码（不是邮箱密码）
   from_name: "Spider-Go 验证码"      # 发件人名称
 ocr:
-  host: ""
+  host: "http://139.196.168.236:8000/ocr"
