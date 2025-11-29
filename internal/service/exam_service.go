@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"spider-go/internal/cache"
 	"spider-go/internal/common"
 	"spider-go/internal/repository"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -34,6 +36,7 @@ type examServiceImpl struct {
 	userRepo       repository.UserRepository
 	sessionService SessionService
 	crawlerService CrawlerService
+	userDataCache  cache.UserDataCache
 	examURL        string
 }
 
@@ -42,12 +45,14 @@ func NewExamService(
 	userRepo repository.UserRepository,
 	sessionService SessionService,
 	crawlerService CrawlerService,
+	userDataCache cache.UserDataCache,
 	examURL string,
 ) ExamService {
 	return &examServiceImpl{
 		userRepo:       userRepo,
 		sessionService: sessionService,
 		crawlerService: crawlerService,
+		userDataCache:  userDataCache,
 		examURL:        examURL,
 	}
 }
@@ -70,25 +75,39 @@ func (s *examServiceImpl) GetAllExams(ctx context.Context, uid int, term string)
 		return nil, common.NewAppError(common.CodeJwcNotBound, "")
 	}
 
-	// 3. 获取会话
+	// 3. 先查询缓存
+	var cachedExams []ExamArrangement
+	if err := s.userDataCache.GetExams(ctx, uid, term, &cachedExams); err == nil {
+		return cachedExams, nil
+	}
+
+	// 4. 获取会话
 	cookies, err := s.getCookiesOrLogin(ctx, uid, user.Sid, user.Spwd)
 	if err != nil {
 		return nil, err
 	}
 
-	// 4. 构造请求
+	// 5. 构造请求
 	form := url.Values{}
 	form.Add("xnxqid", term)
 
-	// 5. 发起请求
+	// 6. 发起请求
 	body, err := s.crawlerService.FetchWithCookies(ctx, "POST", s.examURL, cookies, form)
 	if err != nil {
 		return nil, err
 	}
 	defer body.Close()
 
-	// 6. 解析响应
-	return s.parseExamArrangementFromHTML(body)
+	// 7. 解析响应
+	exams, err := s.parseExamArrangementFromHTML(body)
+	if err != nil {
+		return nil, err
+	}
+
+	// 8. 写入缓存（1小时过期）
+	_ = s.userDataCache.CacheExams(ctx, uid, term, exams, time.Hour)
+
+	return exams, nil
 }
 
 // getCookiesOrLogin 获取缓存的 cookies 或登录

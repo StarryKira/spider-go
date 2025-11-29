@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"spider-go/internal/cache"
 	"spider-go/internal/common"
 	"spider-go/internal/repository"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -59,6 +61,7 @@ type gradeServiceImpl struct {
 	userRepo       repository.UserRepository
 	sessionService SessionService
 	crawlerService CrawlerService
+	userDataCache  cache.UserDataCache
 	gradeURL       string
 	gradeLevelURL  string
 }
@@ -68,6 +71,7 @@ func NewGradeService(
 	userRepo repository.UserRepository,
 	sessionService SessionService,
 	crawlerService CrawlerService,
+	userDataCache cache.UserDataCache,
 	gradeURL string,
 	gradeLevelURL string,
 ) GradeService {
@@ -75,6 +79,7 @@ func NewGradeService(
 		userRepo:       userRepo,
 		sessionService: sessionService,
 		crawlerService: crawlerService,
+		userDataCache:  userDataCache,
 		gradeURL:       gradeURL,
 		gradeLevelURL:  gradeLevelURL,
 	}
@@ -92,57 +97,14 @@ func (s *gradeServiceImpl) GetAllGrade(ctx context.Context, uid int) ([]Grade, *
 		return nil, nil, common.NewAppError(common.CodeJwcNotBound, "")
 	}
 
-	// 2. 获取会话
-	cookies, err := s.getCookiesOrLogin(ctx, uid, user.Sid, user.Spwd)
-	if err != nil {
-		return nil, nil, err
+	// 2. 先查询缓存
+	type GradeData struct {
+		Grades []Grade `json:"grades"`
+		GPA    *GPA    `json:"gpa"`
 	}
-
-	// 3. 构造请求
-	form := url.Values{}
-	form.Set("kksj", "")
-	form.Set("kcxz", "")
-	form.Set("kcmc", "")
-	form.Set("xsfs", "all")
-
-	// 4. 发起请求
-	body, err := s.crawlerService.FetchWithCookies(ctx, "POST", s.gradeURL, cookies, form)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer body.Close()
-
-	// 5. 解析成绩
-	gradeList, err := s.parseGradesFromHTML(body)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// 6. 计算 GPA
-	gpa, err := s.calculateGPA(gradeList)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return gradeList, gpa, nil
-}
-
-// GetGradeByTerm 根据学期获取成绩
-func (s *gradeServiceImpl) GetGradeByTerm(ctx context.Context, uid int, term string) ([]Grade, *GPA, error) {
-	// 1. 校验参数
-	re := regexp.MustCompile(`^\d{4}-\d{4}-[12]$`)
-	if !re.MatchString(term) {
-		return nil, nil, common.NewAppError(common.CodeJwcInvalidParams, "学期格式错误")
-	}
-
-	// 2. 获取用户信息
-	user, err := s.userRepo.GetUserByUid(uid)
-	if err != nil {
-		return nil, nil, common.NewAppError(common.CodeUserNotFound, "用户不存在")
-	}
-
-	if user.Sid == "" || user.Spwd == "" {
-		return nil, nil, common.NewAppError(common.CodeJwcNotBound, "")
+	var cachedData GradeData
+	if err := s.userDataCache.GetGrades(ctx, uid, "", &cachedData); err == nil {
+		return cachedData.Grades, cachedData.GPA, nil
 	}
 
 	// 3. 获取会话
@@ -153,7 +115,7 @@ func (s *gradeServiceImpl) GetGradeByTerm(ctx context.Context, uid int, term str
 
 	// 4. 构造请求
 	form := url.Values{}
-	form.Set("kksj", term)
+	form.Set("kksj", "")
 	form.Set("kcxz", "")
 	form.Set("kcmc", "")
 	form.Set("xsfs", "all")
@@ -176,6 +138,83 @@ func (s *gradeServiceImpl) GetGradeByTerm(ctx context.Context, uid int, term str
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// 8. 写入缓存（1小时过期）
+	data := GradeData{
+		Grades: gradeList,
+		GPA:    gpa,
+	}
+	_ = s.userDataCache.CacheGrades(ctx, uid, "", data, time.Hour)
+
+	return gradeList, gpa, nil
+}
+
+// GetGradeByTerm 根据学期获取成绩
+func (s *gradeServiceImpl) GetGradeByTerm(ctx context.Context, uid int, term string) ([]Grade, *GPA, error) {
+	// 1. 校验参数
+	re := regexp.MustCompile(`^\d{4}-\d{4}-[12]$`)
+	if !re.MatchString(term) {
+		return nil, nil, common.NewAppError(common.CodeJwcInvalidParams, "学期格式错误")
+	}
+
+	// 2. 获取用户信息
+	user, err := s.userRepo.GetUserByUid(uid)
+	if err != nil {
+		return nil, nil, common.NewAppError(common.CodeUserNotFound, "用户不存在")
+	}
+
+	if user.Sid == "" || user.Spwd == "" {
+		return nil, nil, common.NewAppError(common.CodeJwcNotBound, "")
+	}
+
+	// 3. 先查询缓存
+	type GradeData struct {
+		Grades []Grade `json:"grades"`
+		GPA    *GPA    `json:"gpa"`
+	}
+	var cachedData GradeData
+	if err := s.userDataCache.GetGrades(ctx, uid, term, &cachedData); err == nil {
+		return cachedData.Grades, cachedData.GPA, nil
+	}
+
+	// 4. 获取会话
+	cookies, err := s.getCookiesOrLogin(ctx, uid, user.Sid, user.Spwd)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 5. 构造请求
+	form := url.Values{}
+	form.Set("kksj", term)
+	form.Set("kcxz", "")
+	form.Set("kcmc", "")
+	form.Set("xsfs", "all")
+
+	// 6. 发起请求
+	body, err := s.crawlerService.FetchWithCookies(ctx, "POST", s.gradeURL, cookies, form)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer body.Close()
+
+	// 7. 解析成绩
+	gradeList, err := s.parseGradesFromHTML(body)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 8. 计算 GPA
+	gpa, err := s.calculateGPA(gradeList)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 9. 写入缓存（1小时过期）
+	data := GradeData{
+		Grades: gradeList,
+		GPA:    gpa,
+	}
+	_ = s.userDataCache.CacheGrades(ctx, uid, term, data, time.Hour)
 
 	return gradeList, gpa, nil
 }

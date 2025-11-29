@@ -25,19 +25,24 @@ func main() {
 		}
 	}()
 
-	// 2. 创建 Gin 引擎
+	// 2. 启动定时任务调度器
+	scheduler := app.NewScheduler(container.TaskService)
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	// 3. 创建 Gin 引擎
 	r := gin.Default()
 
-	// 3. 设置路由
+	// 4. 设置路由
 	api.SetupRoutes(r, container)
 
-	// 4. 启动服务器
+	// 5. 启动服务器
 	port := container.Config.App.Port
 	addr := ":" + strconv.Itoa(port)
 
 	log.Printf("服务器启动在端口: %d\n", port)
 
-	// 5. 优雅关闭
+	// 6. 优雅关闭
 	go func() {
 		if err := r.Run(addr); err != nil {
 			log.Fatalf("服务器启动失败: %v", err)

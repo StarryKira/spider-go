@@ -29,10 +29,11 @@ type Container struct {
 	NoticeRepo repository.NoticeRepository
 
 	// Caches
-	SessionCache cache.SessionCache
-	CaptchaCache cache.CaptchaCache
-	DAUCache     cache.DAUCache
-	ConfigCache  cache.ConfigCache
+	SessionCache  cache.SessionCache
+	CaptchaCache  cache.CaptchaCache
+	DAUCache      cache.DAUCache
+	ConfigCache   cache.ConfigCache
+	UserDataCache cache.UserDataCache
 
 	// Services
 	SessionService       service.SessionService
@@ -47,6 +48,7 @@ type Container struct {
 	GradeService         service.GradeService
 	ExamService          service.ExamService
 	GradeAnalysisService service.GradeAnalysisService
+	TaskService          service.TaskService
 
 	// Controllers
 	UserController          *controller.UserController
@@ -181,6 +183,8 @@ func (c *Container) initCaches() {
 	c.DAUCache = cache.NewRedisDAUCache(c.SessionRedis)
 	// 系统配置缓存（DB 0，与会话共用）
 	c.ConfigCache = cache.NewRedisConfigCache(c.SessionRedis)
+	// 用户数据缓存（DB 0，与会话共用）
+	c.UserDataCache = cache.NewRedisUserDataCache(c.SessionRedis)
 }
 
 // initServices 初始化 Services
@@ -241,6 +245,7 @@ func (c *Container) initServices() {
 		c.UserRepo,
 		c.SessionService,
 		c.CrawlerService,
+		c.UserDataCache,
 		c.Config.Jwc.CourseURL,
 	)
 
@@ -249,6 +254,7 @@ func (c *Container) initServices() {
 		c.UserRepo,
 		c.SessionService,
 		c.CrawlerService,
+		c.UserDataCache,
 		c.Config.Jwc.GradeURL,
 		c.Config.Jwc.GradeLevelURL,
 	)
@@ -258,12 +264,25 @@ func (c *Container) initServices() {
 		c.UserRepo,
 		c.SessionService,
 		c.CrawlerService,
+		c.UserDataCache,
 		c.Config.Jwc.ExamURL,
 	)
 
 	// Grade Analysis Service（成绩分析服务）
 	c.GradeAnalysisService = service.NewGradeAnalysisService(
 		c.GradeService,
+		c.ConfigCache,
+	)
+
+	// Task Service（定时任务服务）
+	c.TaskService = service.NewTaskService(
+		c.UserRepo,
+		c.DAUCache,
+		c.SessionService,
+		c.CourseService,
+		c.GradeService,
+		c.ExamService,
+		c.UserDataCache,
 		c.ConfigCache,
 	)
 }

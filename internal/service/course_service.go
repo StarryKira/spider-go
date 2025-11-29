@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"spider-go/internal/cache"
 	"spider-go/internal/common"
 	"spider-go/internal/repository"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -25,6 +27,7 @@ type courseServiceImpl struct {
 	userRepo       repository.UserRepository
 	sessionService SessionService
 	crawlerService CrawlerService
+	userDataCache  cache.UserDataCache
 	courseURL      string
 }
 
@@ -33,12 +36,14 @@ func NewCourseService(
 	userRepo repository.UserRepository,
 	sessionService SessionService,
 	crawlerService CrawlerService,
+	userDataCache cache.UserDataCache,
 	courseURL string,
 ) CourseService {
 	return &courseServiceImpl{
 		userRepo:       userRepo,
 		sessionService: sessionService,
 		crawlerService: crawlerService,
+		userDataCache:  userDataCache,
 		courseURL:      courseURL,
 	}
 }
@@ -93,26 +98,40 @@ func (s *courseServiceImpl) GetCourseTableByWeek(ctx context.Context, week int, 
 		return nil, common.NewAppError(common.CodeJwcNotBound, "")
 	}
 
-	// 3. 获取或创建会话
-	cookies, err := s.getCookiesOrLogin(ctx, uid, user.Sid, user.Spwd)
-	if err != nil {
-		return nil, err
+	// 3. 先查询缓存
+	var cachedSchedule WeekSchedule
+	if err := s.userDataCache.GetCourseTable(ctx, uid, term, week, &cachedSchedule); err == nil {
+		return &cachedSchedule, nil
 	}
 
-	// 4. 构造请求
+	// 4. 获取或创建会话
+	cookies, err := s.getCookiesOrLogin(ctx, uid, user.Sid, user.Spwd)
+	if err != nil {
+		return nil, common.NewAppError(common.CodeJwcLoginFailed, "获取cookie失败")
+	}
+
+	// 5. 构造请求
 	form := url.Values{}
 	form.Add("zc", strconv.Itoa(week))
 	form.Add("xnxq01id", term)
 
-	// 5. 发起请求
+	// 6. 发起请求
 	body, err := s.crawlerService.FetchWithCookies(ctx, "POST", s.courseURL, cookies, form)
 	if err != nil {
 		return nil, err
 	}
 	defer body.Close()
 
-	// 6. 解析响应
-	return s.parseCourseTableFromHTML(body)
+	// 7. 解析响应
+	schedule, err := s.parseCourseTableFromHTML(body)
+	if err != nil {
+		return nil, err
+	}
+
+	// 8. 写入缓存（1小时过期）
+	_ = s.userDataCache.CacheCourseTable(ctx, uid, term, week, schedule, time.Hour)
+
+	return schedule, nil
 }
 
 // getCookiesOrLogin 获取缓存的 cookies 或登录

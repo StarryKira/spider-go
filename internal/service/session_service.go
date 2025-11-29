@@ -54,8 +54,22 @@ func NewJwcSessionService(sessionCache cache.SessionCache, jwcURL string, captch
 	}
 }
 
-// LoginAndCache 登录教务系统并缓存会话
+// LoginAndCache 登录教务系统并缓存会话（带重试机制）
 func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username, password string) error {
+	var err error
+	// 重试 3 次
+	for i := 0; i < 3; i++ {
+		if err = s.loginAndCacheOnce(ctx, uid, username, password); err == nil {
+			return nil
+		}
+		// 重试间隔
+		time.Sleep(time.Second * time.Duration(i+1))
+	}
+	return common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("登录失败，已重试3次: %v", err))
+}
+
+// loginAndCacheOnce 单次登录逻辑
+func (s *jwcSessionService) loginAndCacheOnce(ctx context.Context, uid int, username, password string) error {
 	// 创建 cookie jar
 	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	if err != nil {
