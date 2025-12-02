@@ -20,7 +20,7 @@ type RSAKeyService interface {
 	GetLastUpdated() time.Time
 }
 
-// rsaKeyServiceImpl RSA 公钥服务实现（线程安全）
+// rsaKeyServiceImpl RSA 公钥服务实现
 type rsaKeyServiceImpl struct {
 	mu            sync.RWMutex
 	publicKey     string
@@ -37,7 +37,7 @@ func NewRSAKeyService(rsaKeyURL string) RSAKeyService {
 	}
 }
 
-// GetPublicKey 获取当前的 RSA 公钥（线程安全）
+// GetPublicKey 获取当前的 RSA 公钥
 func (s *rsaKeyServiceImpl) GetPublicKey() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -75,7 +75,7 @@ func (s *rsaKeyServiceImpl) FetchAndUpdate() error {
 	return nil
 }
 
-// GetLastUpdated 获取最后更新时间（线程安全）
+// GetLastUpdated 获取最后更新时间
 func (s *rsaKeyServiceImpl) GetLastUpdated() time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
