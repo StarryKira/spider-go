@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log"
 	"spider-go/internal/cache"
 	"spider-go/internal/controller"
 	"spider-go/internal/repository"
@@ -36,6 +37,7 @@ type Container struct {
 	UserDataCache cache.UserDataCache
 
 	// Services
+	RSAKeyService        service.RSAKeyService
 	SessionService       service.SessionService
 	CrawlerService       service.CrawlerService
 	EmailService         service.EmailService
@@ -93,6 +95,11 @@ func NewContainer(configPath string) (*Container, error) {
 
 	// 初始化 Controllers
 	c.initControllers()
+
+	// 初始化 RSA 公钥（首次获取）
+	if err := c.initRSAPublicKey(); err != nil {
+		return nil, fmt.Errorf("初始化 RSA 公钥失败: %w", err)
+	}
 
 	// 初始化默认管理员（如果不存在）
 	if err := c.AdminService.InitDefaultAdmin(); err != nil {
@@ -189,13 +196,18 @@ func (c *Container) initCaches() {
 
 // initServices 初始化 Services
 func (c *Container) initServices() {
+	// RSA Key Service（RSA 公钥服务）
+	c.RSAKeyService = service.NewRSAKeyService(c.Config.Jwc.GetRSAKeyURL)
+
 	// Session Service
 	c.SessionService = service.NewJwcSessionService(
 		c.SessionCache,
+		c.RSAKeyService,
 		c.Config.Jwc.LoginURL,
+		c.Config.Jwc.RedirectURL,
 		c.Config.Jwc.CaptchaURL,
 		c.Config.Jwc.CaptchaImageURL,
-		c.Config.Ocr.host,
+		c.Config.Ocr.Host,
 	)
 
 	// Crawler Service
@@ -299,6 +311,16 @@ func (c *Container) initControllers() {
 	c.NoticeController = controller.NewNoticeController(c.NoticeService)
 	c.GradeAnalysisController = controller.NewGradeAnalysisController(c.GradeAnalysisService)
 	c.ConfigController = controller.NewConfigController(c.ConfigCache)
+}
+
+// initRSAPublicKey 初始化 RSA 公钥
+func (c *Container) initRSAPublicKey() error {
+	log.Println("正在获取 RSA 公钥...")
+	if err := c.RSAKeyService.FetchAndUpdate(); err != nil {
+		return fmt.Errorf("首次获取 RSA 公钥失败: %w", err)
+	}
+	log.Println("RSA 公钥初始化成功")
+	return nil
 }
 
 // Close 关闭资源

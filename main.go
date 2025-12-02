@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	// 1. 创建依赖注入容器
+	// 1. 创建依赖注入容器（自动完成所有初始化，包括 RSA 公钥）
 	container, err := app.NewContainer("./config")
 	if err != nil {
 		log.Fatalf("初始化容器失败: %v", err)
@@ -26,7 +26,7 @@ func main() {
 	}()
 
 	// 2. 启动定时任务调度器
-	scheduler := app.NewScheduler(container.TaskService)
+	scheduler := app.NewScheduler(container.TaskService, container.RSAKeyService)
 	scheduler.Start()
 	defer scheduler.Stop()
 

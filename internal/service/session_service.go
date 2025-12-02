@@ -2,7 +2,13 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -11,8 +17,6 @@ import (
 	"net/url"
 	"spider-go/internal/cache"
 	"spider-go/internal/common"
-	"spider-go/internal/utils"
-	"strconv"
 	"strings"
 	"time"
 
@@ -33,7 +37,9 @@ type SessionService interface {
 // jwcSessionService 教务系统会话服务实现
 type jwcSessionService struct {
 	sessionCache    cache.SessionCache
-	jwcURL          string
+	rsaKeyService   RSAKeyService
+	loginURL        string
+	redirectURL     string
 	captchaURL      string
 	ocrURL          string
 	captchaImageURL string
@@ -42,10 +48,20 @@ type jwcSessionService struct {
 }
 
 // NewJwcSessionService 创建教务系统会话服务
-func NewJwcSessionService(sessionCache cache.SessionCache, jwcURL string, captchaURL string, captchaImageURL string, ocrURL string) SessionService {
+func NewJwcSessionService(
+	sessionCache cache.SessionCache,
+	rsaKeyService RSAKeyService,
+	loginURL string,
+	redirectURL string,
+	captchaURL string,
+	captchaImageURL string,
+	ocrURL string,
+) SessionService {
 	return &jwcSessionService{
 		sessionCache:    sessionCache,
-		jwcURL:          jwcURL,
+		rsaKeyService:   rsaKeyService,
+		loginURL:        loginURL,
+		redirectURL:     redirectURL,
 		captchaURL:      captchaURL,
 		captchaImageURL: captchaImageURL,
 		ocrURL:          ocrURL,
@@ -71,7 +87,9 @@ func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username
 // loginAndCacheOnce 单次登录逻辑
 func (s *jwcSessionService) loginAndCacheOnce(ctx context.Context, uid int, username, password string) error {
 	// 创建 cookie jar
-	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	jar, err := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
 	if err != nil {
 		return common.NewAppError(common.CodeJwcLoginFailed, "创建会话失败")
 	}
@@ -80,111 +98,76 @@ func (s *jwcSessionService) loginAndCacheOnce(ctx context.Context, uid int, user
 		Jar:     jar,
 		Timeout: s.timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
+			return http.ErrUseLastResponse // 禁止自动跳转（CAS 必须手动）
 		},
 	}
 
-	// 1. 获取登录页面
-	res, err := client.Get(s.jwcURL)
+	// 1. 请求登录页获取 execution
+	res, err := client.Get(s.loginURL)
 	if err != nil {
 		return common.NewAppError(common.CodeJwcLoginFailed, "连接教务系统失败")
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("教务系统响应异常: %d", res.StatusCode))
+		return common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("响应异常: %d", res.StatusCode))
 	}
 
-	// 2. 解析登录表单
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
 		return common.NewAppError(common.CodeJwcParseFailed, "解析登录页面失败")
 	}
 
-	lt := doc.Find("input[name='lt']").AttrOr("value", "")
-	dllt := doc.Find("input[name='dllt']").AttrOr("value", "")
 	execution := doc.Find("input[name='execution']").AttrOr("value", "")
-	eventID := doc.Find("input[name='_eventId']").AttrOr("value", "")
-	salt := doc.Find("input[id='pwdDefaultEncryptSalt']").AttrOr("value", "")
-	rmShown := doc.Find("input[name='rmShown']").AttrOr("value", "")
-
-	if lt == "" || execution == "" || eventID == "" || salt == "" {
-		return common.NewAppError(common.CodeJwcLoginFailed, "登录页缺少必要字段")
+	if execution == "" {
+		return common.NewAppError(common.CodeJwcLoginFailed, "找不到 execution")
 	}
 
-	//构造请求体
-	encryptedPwd := utils.JsCrypto(password, salt)
-
-	form := url.Values{}
-	form.Set("username", username)
-	form.Set("password", encryptedPwd)
-	form.Set("lt", lt)
-	form.Set("dllt", dllt)
-	form.Set("execution", execution)
-	form.Set("_eventId", eventID)
-	form.Set("rmShown", rmShown)
-
-	//处理验证码
-	isNeedCaptcha, err := client.Get(s.captchaURL + "username=" + username + "&pwdEncrypt2=pwdEncryptSalt" + "&_=" + strconv.FormatInt(time.Now().UnixMilli(), 10))
+	// 2. 密码加密
+	encryptedPwd, err := s.encryptPassword(password)
 	if err != nil {
-		return common.NewAppError(common.CodeJwcLoginFailed, "获取验证码失败")
+		return common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("密码加密失败: %v", err))
 	}
-	defer isNeedCaptcha.Body.Close()
-	length := isNeedCaptcha.ContentLength
-	body := make([]byte, length)
-	_, err = isNeedCaptcha.Body.Read(body)
+
+	fpVisitorId, err := s.GenerateRandomFingerPrintHash()
 	if err != nil {
-		return common.NewAppError(common.CodeInternalError, "获取是否需要验证码失败")
+		return common.NewAppError(common.CodeInternalError, "生成设备指纹失败")
 	}
 
-	if string(body) == "true" {
-		picReq, err := client.Get(s.captchaImageURL + "ts=" + strconv.FormatInt(time.Now().UnixMilli()%1000, 10))
-		if err != nil {
-			return common.NewAppError(common.CodeInternalError, "获取验证码图片失败")
-		}
-		defer picReq.Body.Close()
-		imgBytes, err := io.ReadAll(picReq.Body)
-		if err != nil {
-			return common.NewAppError(common.CodeInternalError, "验证码图片编码失败")
-		}
-
-		// 转换为 Base64
-		base64Str := base64.StdEncoding.EncodeToString(imgBytes)
-		captchaResult, err := s.HandleCaptcha(base64Str)
-		if err != nil {
-			return common.NewAppError(common.CodeInternalError, "识别验证码失败")
-		}
-
-		form.Set("aptchaResponse", captchaResult)
+	form := url.Values{
+		"username":    {username},
+		"password":    {encryptedPwd},
+		"execution":   {execution},
+		"fpVisitorId": {fpVisitorId},
+		"_eventId":    {"submit"},
+		"failN":       {"0"},
+		"submit1":     {"login1"},
 	}
 
-	//提交请求
-	req, err := http.NewRequest("POST", s.jwcURL, strings.NewReader(form.Encode()))
+	// 3. 构造 POST 请求
+	req, err := http.NewRequest("POST", s.loginURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return common.NewAppError(common.CodeJwcLoginFailed, "构造登录请求失败")
 	}
+
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Referer", s.jwcURL)
+	req.Header.Set("Referer", s.loginURL)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return common.NewAppError(common.CodeJwcLoginFailed, "登录请求失败")
-	}
-	defer resp.Body.Close()
-
-	// 4. 检查重定向
-	if resp.StatusCode/100 != 3 {
-		return common.NewAppError(common.CodeJwcLoginFailed, "登录失败，请检查账号密码")
+		return common.NewAppError(common.CodeJwcLoginFailed, "登录失败")
 	}
 
-	loc, err := resp.Location()
-	if err != nil {
-		return common.NewAppError(common.CodeJwcLoginFailed, "获取重定向地址失败")
+	resp.Body.Close()
+
+	if resp.StatusCode != 302 {
+		return common.NewAppError(common.CodeJwcLoginFailed, "重定向并非302")
 	}
 
-	// 5. 跟随重定向获取完整 cookies
-	finalResp, finalURL, err := s.followGET(client, loc.String(), 8)
+	//直接不处理重定向，用这个tgc的cookie去get教务系统，触发下一条重定向链，get全自动重定向
+
+	finalResp, finalURL, err := s.followGET(client, s.redirectURL, 8)
 	if err != nil {
 		return common.NewAppError(common.CodeJwcLoginFailed, "跟随重定向失败")
 	}
@@ -196,7 +179,7 @@ func (s *jwcSessionService) loginAndCacheOnce(ctx context.Context, uid int, user
 	cookies := client.Jar.Cookies(base)
 
 	if len(cookies) == 0 {
-		if u, e := url.Parse(loc.String()); e == nil {
+		if u, e := url.Parse(s.redirectURL); e == nil {
 			cookies = client.Jar.Cookies(u)
 		}
 	}
@@ -209,17 +192,6 @@ func (s *jwcSessionService) loginAndCacheOnce(ctx context.Context, uid int, user
 	return nil
 }
 
-// GetCachedCookies 获取缓存的 cookies
-func (s *jwcSessionService) GetCachedCookies(ctx context.Context, uid int) ([]*http.Cookie, error) {
-	return s.sessionCache.GetCookies(ctx, uid)
-}
-
-// InvalidateSession 清除会话缓存
-func (s *jwcSessionService) InvalidateSession(ctx context.Context, uid int) error {
-	return s.sessionCache.DeleteCookies(ctx, uid)
-}
-
-// followGET 手动跟随 GET 重定向
 func (s *jwcSessionService) followGET(client *http.Client, start string, maxHops int) (*http.Response, string, error) {
 	cur := start
 	var lastReqURL *url.URL
@@ -253,7 +225,7 @@ func (s *jwcSessionService) followGET(client *http.Client, start string, maxHops
 
 		locURL, err := url.Parse(loc)
 		if err != nil {
-			return nil, cur, fmt.Errorf("Location 无法解析: %v", err)
+			return nil, cur, fmt.Errorf("location 无法解析: %v", err)
 		}
 
 		cur = lastReqURL.ResolveReference(locURL).String()
@@ -261,6 +233,16 @@ func (s *jwcSessionService) followGET(client *http.Client, start string, maxHops
 	}
 
 	return nil, cur, errors.New("重定向层级过多")
+}
+
+// GetCachedCookies 获取缓存的 cookies
+func (s *jwcSessionService) GetCachedCookies(ctx context.Context, uid int) ([]*http.Cookie, error) {
+	return s.sessionCache.GetCookies(ctx, uid)
+}
+
+// InvalidateSession 清除会话缓存
+func (s *jwcSessionService) InvalidateSession(ctx context.Context, uid int) error {
+	return s.sessionCache.DeleteCookies(ctx, uid)
 }
 
 func (s *jwcSessionService) HandleCaptcha(picBase64 string) (string, error) {
@@ -280,4 +262,88 @@ func (s *jwcSessionService) HandleCaptcha(picBase64 string) (string, error) {
 		panic(err)
 	}
 	return string(body), nil
+}
+
+// encryptPassword 使用 RSA 公钥加密密码
+func (s *jwcSessionService) encryptPassword(password string) (string, error) {
+	// 从 RSA Key Service 获取公钥
+	publicKey := s.rsaKeyService.GetPublicKey()
+	if publicKey == "" {
+		return "", common.NewAppError(common.CodeInternalError, "RSA 公钥未初始化")
+	}
+
+	// 1. 解析 PEM 公钥
+	block, _ := pem.Decode([]byte(publicKey))
+	if block == nil {
+		return "", common.NewAppError(common.CodeJwcLoginFailed, "RSA 公钥格式无效")
+	}
+
+	pubInterface, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return "", common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("解析 RSA 公钥失败: %v", err))
+	}
+
+	pub := pubInterface.(*rsa.PublicKey)
+
+	// 2. 执行 RSA 加密（PKCS1v15 —— 和 JSEncrypt 完全一致）
+	encryptedBytes, err := rsa.EncryptPKCS1v15(rand.Reader, pub, []byte(password))
+	if err != nil {
+		return "", common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("RSA 加密失败: %v", err))
+	}
+
+	// 3. 输出 Base64（JSEncrypt 默认也是 Base64）
+	return "__RSA__" + base64.StdEncoding.EncodeToString(encryptedBytes), nil
+}
+
+// GenerateRandomFingerPrintHash 随机生成32位设备指纹hash
+func (s *jwcSessionService) GenerateRandomFingerPrintHash() (string, error) {
+	// 生成 32 字节随机数
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+
+	// 计算 SHA256
+	h := sha256.Sum256(b)
+
+	// 转成 hex 字符串返回
+	return hex.EncodeToString(h[:]), nil
+}
+
+// ReplaceClientID 替换clientID
+func (s *jwcSessionService) ReplaceClientID(rawURL, newClientID string) (string, error) {
+	// 解析外层 URL
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+
+	// 解析外层 URL 的查询参数
+	q := u.Query()
+
+	// 获取 service 参数（内层 URL）
+	serviceRaw := q.Get("service")
+	if serviceRaw == "" {
+		return "", fmt.Errorf("service parameter not found")
+	}
+
+	// 解析 service URL
+	serviceURL, err := url.Parse(serviceRaw)
+	if err != nil {
+		return "", err
+	}
+
+	// 解析 service 内层查询参数
+	serviceQ := serviceURL.Query()
+
+	// 替换 client_id
+	serviceQ.Set("client_id", newClientID)
+	serviceURL.RawQuery = serviceQ.Encode()
+
+	// 替换回外层的 service 参数
+	q.Set("service", serviceURL.String())
+	u.RawQuery = q.Encode()
+
+	return u.String(), nil
 }
