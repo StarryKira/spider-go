@@ -139,6 +139,7 @@ func (s *jwcSessionService) loginAndCacheOnce(ctx context.Context, uid int, user
 		"password":    {encryptedPwd},
 		"execution":   {execution},
 		"fpVisitorId": {fpVisitorId},
+		"rememberMe":  {"on"},
 		"_eventId":    {"submit"},
 		"failN":       {"0"},
 		"submit1":     {"login1"},
