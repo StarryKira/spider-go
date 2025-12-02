@@ -20,16 +20,32 @@ type Appconfig struct {
 	Port int `yaml:"port" mapstructure:"port"`
 }
 
+// JwcConfig 教务系统配置
 type JwcConfig struct {
-	LoginURL        string `yaml:"login_url" mapstructure:"login_url"`
-	GetRSAKeyURL    string `yaml:"rsa_url" mapstructure:"rsa_url"`
-	RedirectURL     string `yaml:"redirect_url" mapstructure:"redirect_url"`
-	CourseURL       string `yaml:"course_url" mapstructure:"course_url"`
-	GradeURL        string `yaml:"grade_url" mapstructure:"grade_url"`
-	GradeLevelURL   string `yaml:"grade_level_url" mapstructure:"grade_level_url"`
-	ExamURL         string `yaml:"exam_url" mapstructure:"exam_url"`
-	CaptchaURL      string `yaml:"captcha_url" mapstructure:"captcha_url"`
-	CaptchaImageURL string `yaml:"captcha_image" mapstructure:"captcha_image_url"`
+	Mode            string        `yaml:"mode" mapstructure:"mode"` // 模式：campus 或 webvpn
+	Campus          JwcModeConfig `yaml:"campus" mapstructure:"campus"`
+	Webvpn          JwcModeConfig `yaml:"webvpn" mapstructure:"webvpn"`
+	GetRSAKeyURL    string        `yaml:"rsa_url" mapstructure:"rsa_url"`
+	CaptchaURL      string        `yaml:"captcha_url" mapstructure:"captcha_url"`
+	CaptchaImageURL string        `yaml:"captcha_image_url" mapstructure:"captcha_image_url"`
+}
+
+// JwcModeConfig 教务系统单个模式的配置
+type JwcModeConfig struct {
+	LoginURL      string `yaml:"login_url" mapstructure:"login_url"`
+	RedirectURL   string `yaml:"redirect_url" mapstructure:"redirect_url"`
+	CourseURL     string `yaml:"course_url" mapstructure:"course_url"`
+	GradeURL      string `yaml:"grade_url" mapstructure:"grade_url"`
+	GradeLevelURL string `yaml:"grade_level_url" mapstructure:"grade_level_url"`
+	ExamURL       string `yaml:"exam_url" mapstructure:"exam_url"`
+}
+
+// GetCurrentModeConfig 获取当前模式的配置
+func (c *JwcConfig) GetCurrentModeConfig() JwcModeConfig {
+	if c.Mode == "webvpn" {
+		return c.Webvpn
+	}
+	return c.Campus // 默认使用校园网模式
 }
 
 type JWTConfig struct {

@@ -196,15 +196,20 @@ func (c *Container) initCaches() {
 
 // initServices 初始化 Services
 func (c *Container) initServices() {
+	// 获取当前模式的配置
+	currentMode := c.Config.Jwc.GetCurrentModeConfig()
+	log.Printf("教务系统模式: %s", c.Config.Jwc.Mode)
+
 	// RSA Key Service（RSA 公钥服务）
 	c.RSAKeyService = service.NewRSAKeyService(c.Config.Jwc.GetRSAKeyURL)
 
-	// Session Service
+	// Session Service（根据配置模式注入对应的 URL）
 	c.SessionService = service.NewJwcSessionService(
 		c.SessionCache,
 		c.RSAKeyService,
-		c.Config.Jwc.LoginURL,
-		c.Config.Jwc.RedirectURL,
+		c.Config.Jwc.Mode, // 注入当前模式
+		currentMode.LoginURL,
+		currentMode.RedirectURL,
 		c.Config.Jwc.CaptchaURL,
 		c.Config.Jwc.CaptchaImageURL,
 		c.Config.Ocr.Host,
@@ -252,32 +257,32 @@ func (c *Container) initServices() {
 		c.Config.JWT.Issuer,
 	)
 
-	// Course Service
+	// Course Service（使用当前模式的 URL）
 	c.CourseService = service.NewCourseService(
 		c.UserRepo,
 		c.SessionService,
 		c.CrawlerService,
 		c.UserDataCache,
-		c.Config.Jwc.CourseURL,
+		currentMode.CourseURL,
 	)
 
-	// Grade Service
+	// Grade Service（使用当前模式的 URL）
 	c.GradeService = service.NewGradeService(
 		c.UserRepo,
 		c.SessionService,
 		c.CrawlerService,
 		c.UserDataCache,
-		c.Config.Jwc.GradeURL,
-		c.Config.Jwc.GradeLevelURL,
+		currentMode.GradeURL,
+		currentMode.GradeLevelURL,
 	)
 
-	// Exam Service
+	// Exam Service（使用当前模式的 URL）
 	c.ExamService = service.NewExamService(
 		c.UserRepo,
 		c.SessionService,
 		c.CrawlerService,
 		c.UserDataCache,
-		c.Config.Jwc.ExamURL,
+		currentMode.ExamURL,
 	)
 
 	// Grade Analysis Service（成绩分析服务）
