@@ -22,6 +22,8 @@ type Appconfig struct {
 
 type JwcConfig struct {
 	LoginURL        string `yaml:"login_url" mapstructure:"login_url"`
+	GetRSAKeyURL    string `yaml:"rsa_url" mapstructure:"rsa_url"`
+	RedirectURL     string `yaml:"redirect_url" mapstructure:"redirect_url"`
 	CourseURL       string `yaml:"course_url" mapstructure:"course_url"`
 	GradeURL        string `yaml:"grade_url" mapstructure:"grade_url"`
 	GradeLevelURL   string `yaml:"grade_level_url" mapstructure:"grade_level_url"`
@@ -65,8 +67,10 @@ type RedisClusterConfig struct {
 	Session RedisConfig `yaml:"session" mapstructure:"session"` // DB 0: 用户会话缓存
 	Captcha RedisConfig `yaml:"captcha" mapstructure:"captcha"` // DB 1: 验证码存储
 }
+
+// DdddOCRConfig OCR 服务配置
 type DdddOCRConfig struct {
-	host string `yaml:"host" mapstructure:"host"`
+	Host string `yaml:"host" mapstructure:"host"` // OCR 服务地址
 }
 
 var Conf *Config

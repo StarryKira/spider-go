@@ -22,7 +22,9 @@ jwt:
   secret: "your-super-secret-jwt-key-change-this-in-production"
   issuer: "spider-go"
 jwc:
-  login_url: "https://authserver.csuft.edu.cn/authserver/login?service=http%3A%2F%2Fjwgl.csuft.edu.cn%2F"
+  login_url: "https://cas.csuft.edu.cn/cas/login?service=https%3A%2F%2Fportal.csuft.edu.cn%2F%3Fpath%3Dhttps%253A%252F%252Fportal.csuft.edu.cn%252Fmain.html%2523%252F"
+  rsa_url: "https://cas.csuft.edu.cn/cas/jwt/publicKey"
+  redirect_url: "http://jwgl.csuft.edu.cn/Logon.do?method=logonByZnlkd"
   course_url: "http://jwgl.csuft.edu.cn/jsxsd/xskb/xskb_list.do"
   grade_url: "http://jwgl.csuft.edu.cn/jsxsd/kscj/cjcx_list"
   grade_level_url: "http://jwgl.csuft.edu.cn/jsxsd/kscj/djkscj_list"
