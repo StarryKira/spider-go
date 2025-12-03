@@ -37,6 +37,7 @@ jwc:
   # WebVPN 配置
   webvpn:
     login_url: "https://https-cas-csuft-edu-cn-443.webvpn.csuft.edu.cn/cas/login?service=https://webvpn.csuft.edu.cn/callback/cas/eAF0IG5N"
+    webvpn_token_url: "https://webvpn.csuft.edu.cn/api/access/auth/finish"
     redirect_url: "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/Logon.do?method=logonByZnlkd"
     course_url: "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/xskb/xskb_list.do"
     grade_url: "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/kscj/cjcx_list"
