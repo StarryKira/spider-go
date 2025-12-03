@@ -6,11 +6,13 @@ import (
 	"log"
 	"spider-go/internal/cache"
 	"spider-go/internal/controller"
+	"spider-go/internal/middleware"
 	"spider-go/internal/repository"
 	"spider-go/internal/service"
 	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
@@ -23,6 +25,9 @@ type Container struct {
 	// Redis 客户端（同一个 Redis 服务器的不同数据库）
 	SessionRedis *redis.Client // 会话 Redis (DB 0)
 	CaptchaRedis *redis.Client // 验证码 Redis (DB 1)
+
+	// 中间件
+	CORSMiddleware gin.HandlerFunc
 
 	// Repositories
 	UserRepo   repository.UserRepository
@@ -92,6 +97,9 @@ func NewContainer(configPath string) (*Container, error) {
 
 	// 初始化 Services
 	c.initServices()
+
+	// 初始化中间件
+	c.initMiddlewares()
 
 	// 初始化 Controllers
 	c.initControllers()
@@ -301,6 +309,19 @@ func (c *Container) initServices() {
 		c.ExamService,
 		c.UserDataCache,
 		c.ConfigCache,
+	)
+}
+
+// initMiddlewares 初始化中间件
+func (c *Container) initMiddlewares() {
+	cors := c.Config.CORS
+	c.CORSMiddleware = middleware.NewCORSMiddleware(
+		cors.AllowOrigins,
+		cors.AllowMethods,
+		cors.AllowHeaders,
+		cors.ExposeHeaders,
+		cors.AllowCredentials,
+		cors.MaxAge,
 	)
 }
 

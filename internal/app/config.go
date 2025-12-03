@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	App      Appconfig          `yaml:"app" mapstructure:"app"`
+	CORS     CORSConfig         `yaml:"cors" mapstructure:"cors"`
 	Database DatabaseConfig     `yaml:"database" mapstructure:"database"`
 	Redis    RedisClusterConfig `yaml:"redis" mapstructure:"redis"`
 	Jwc      JwcConfig          `yaml:"jwc" mapstructure:"jwc"`
@@ -18,6 +19,16 @@ type Config struct {
 
 type Appconfig struct {
 	Port int `yaml:"port" mapstructure:"port"`
+}
+
+// CORSConfig CORS 跨域配置
+type CORSConfig struct {
+	AllowOrigins     []string `yaml:"allow_origins" mapstructure:"allow_origins"`
+	AllowMethods     []string `yaml:"allow_methods" mapstructure:"allow_methods"`
+	AllowHeaders     []string `yaml:"allow_headers" mapstructure:"allow_headers"`
+	ExposeHeaders    []string `yaml:"expose_headers" mapstructure:"expose_headers"`
+	AllowCredentials bool     `yaml:"allow_credentials" mapstructure:"allow_credentials"`
+	MaxAge           int      `yaml:"max_age" mapstructure:"max_age"` // 预检请求缓存时间（秒）
 }
 
 // JwcConfig 教务系统配置

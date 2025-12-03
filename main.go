@@ -33,6 +33,9 @@ func main() {
 	// 3. 创建 Gin 引擎
 	r := gin.Default()
 
+	// 3.1 应用 CORS 中间件（全局）
+	r.Use(container.CORSMiddleware)
+
 	// 4. 设置路由
 	api.SetupRoutes(r, container)
 
