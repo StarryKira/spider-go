@@ -24,6 +24,8 @@ type UserService interface {
 	GetUserInfo(ctx context.Context, uid int) (*model.User, error)
 	// ResetPassword 使用验证码修改密码
 	ResetPassword(ctx context.Context, email string, sid, password string) error
+	// CheckIsBind 检查用户是否绑定教务系统账号
+	CheckIsBind(ctx context.Context, uid int) (bool, error)
 }
 
 // userServiceImpl 用户服务实现
@@ -185,4 +187,16 @@ func (s *userServiceImpl) ResetPassword(ctx context.Context, email string, passw
 		return common.NewAppError(common.CodeInternalError, "修改密码失败")
 	}
 	return nil
+}
+
+// CheckIsBind 检查用户是否绑定教务系统账号
+func (s *userServiceImpl) CheckIsBind(ctx context.Context, uid int) (bool, error) {
+	user, err := s.userRepo.GetUserByUid(uid)
+	if err != nil {
+		return false, common.NewAppError(common.CodeUserNotFound, "用户不存在")
+	}
+
+	// 判断是否绑定：Sid 和 Spwd 都不为空
+	isBind := user.Sid != "" && user.Spwd != ""
+	return isBind, nil
 }

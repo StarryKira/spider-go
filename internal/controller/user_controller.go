@@ -130,3 +130,26 @@ func (h *UserController) ResetPassword(c *gin.Context) {
 	}
 	common.Success(c, gin.H{"message": "重置成功"})
 }
+
+// CheckIsBind 检查用户是否绑定教务系统账号
+func (h *UserController) CheckIsBind(c *gin.Context) {
+	uid, ok := c.Get("uid")
+	if !ok {
+		common.Error(c, common.CodeUnauthorized, "未授权")
+		return
+	}
+
+	isBind, err := h.userSvc.CheckIsBind(c.Request.Context(), uid.(int))
+	if err != nil {
+		if appErr, ok := err.(*common.AppError); ok {
+			common.ErrorWithAppError(c, appErr)
+		} else {
+			common.Error(c, common.CodeInternalError, "检查绑定状态失败")
+		}
+		return
+	}
+
+	common.Success(c, gin.H{
+		"is_bind": isBind,
+	})
+}

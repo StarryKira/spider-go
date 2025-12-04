@@ -31,6 +31,7 @@ func main() {
 	defer scheduler.Stop()
 
 	// 3. 创建 Gin 引擎
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
 	// 3.1 应用 CORS 中间件（全局）

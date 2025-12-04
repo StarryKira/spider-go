@@ -35,6 +35,7 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 	{
 		user.POST("/bind", container.UserController.BindJwcAccount) // 绑定教务系统账号
 		user.GET("/info", container.UserController.GetUserInfo)     // 获取用户信息
+		user.GET("/isbind", container.UserController.CheckIsBind)   // 检查是否绑定教务系统账号
 
 		// 成绩相关接口（RESTful 规范）
 		user.GET("/grades", container.GradeController.GetGrades)                               // 获取成绩（query: term 可选）
