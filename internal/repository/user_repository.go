@@ -19,6 +19,7 @@ type UserReader interface {
 	GetUserByUid(uid int) (*model.User, error)
 	GetUserByEmail(Email string) (*model.User, error)
 	GetUserByName(name string) (*model.User, error)
+	GetAllUserEmails() ([]string, error)
 }
 
 type UserRepository interface {
@@ -81,4 +82,10 @@ func (repo *gormUserRepository) UpdateAvatar(uid int, AvatarLink string) error {
 func (repo *gormUserRepository) UpdateName(uid int, name string) error {
 	err := repo.gormDB.Model(&model.User{}).Where(uid).Update("name", name).Error
 	return err
+}
+
+func (repo *gormUserRepository) GetAllUserEmails() ([]string, error) {
+	var emails []string
+	err := repo.gormDB.Model(&model.User{}).Pluck("email", &emails).Error
+	return emails, err
 }

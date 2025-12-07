@@ -26,7 +26,8 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 		api.GET("/notices", container.NoticeController.GetVisibleNotices) // 获取可见通知
 
 		// 系统配置（公开 - 查看）
-		api.GET("/config/term", container.ConfigController.GetCurrentTerm) // 获取当前学期
+		api.GET("/config/term", container.ConfigController.GetCurrentTerm)             // 获取当前学期
+		api.GET("/config/semester-dates", container.ConfigController.GetSemesterDates) // 获取学期开学和放假时间
 	}
 
 	// 需要认证的接口（普通用户）
@@ -71,7 +72,11 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 			adminAuth.GET("/statistics/dau/range", container.StatisticsController.GetDAURange) // 获取日活范围统计
 
 			// 系统配置（仅管理员）
-			adminAuth.POST("/config/term", container.ConfigController.SetCurrentTerm) // 设置当前学期
+			adminAuth.POST("/config/term", container.ConfigController.SetCurrentTerm)             // 设置当前学期
+			adminAuth.POST("/config/semester-dates", container.ConfigController.SetSemesterDates) // 设置学期开学和放假时间
+
+			// 群发邮件（仅管理员）
+			adminAuth.POST("/broadcast-email", container.AdminController.BroadcastEmail) // 群发邮件给所有用户
 		}
 	}
 }

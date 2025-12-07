@@ -84,3 +84,29 @@ func (h *AdminController) ChangePwd(c *gin.Context) {
 	common.Success(c, gin.H{"message": "重置成功"})
 	return
 }
+
+// BroadcastEmail 群发邮件给所有用户
+func (h *AdminController) BroadcastEmail(c *gin.Context) {
+	var req dto.BroadcastEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Error(c, common.CodeInvalidParams, "参数错误")
+		return
+	}
+
+	successCount, failCount, err := h.adminSvc.BroadcastEmail(c.Request.Context(), req.Subject, req.Body)
+	if err != nil {
+		if appErr, ok := err.(*common.AppError); ok {
+			common.ErrorWithAppError(c, appErr)
+		} else {
+			common.Error(c, common.CodeInternalError, "群发邮件失败")
+		}
+		return
+	}
+
+	common.Success(c, gin.H{
+		"message":       "群发邮件完成",
+		"success_count": successCount,
+		"fail_count":    failCount,
+		"total_count":   successCount + failCount,
+	})
+}
