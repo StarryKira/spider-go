@@ -141,7 +141,9 @@ func (s *userServiceImpl) Bind(ctx context.Context, uid int, sid, spwd string) e
 	if sid == "" || spwd == "" {
 		return common.NewAppError(common.CodeInvalidParams, "学号和密码不能为空")
 	}
-
+	if s.sessionService.LoginAndCache(ctx, uid, sid, spwd) != nil {
+		return common.NewAppError(common.CodeJwcInvalidParams, "请绑定i中南林APP账号")
+	}
 	// 更新数据库
 	if err := s.userRepo.UpdateJwc(uid, sid, spwd); err != nil {
 		return common.NewAppError(common.CodeInternalError, "更新绑定信息失败")

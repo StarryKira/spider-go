@@ -76,7 +76,7 @@ func NewJwcSessionService(
 // LoginAndCache 登录教务系统并缓存会话（带重试机制，根据模式选择登录方法）
 func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username, password string) error {
 	var err error
-	// 重试 3 次
+	// 重试 1 次
 	for i := 0; i < 1; i++ {
 		// 根据模式选择登录函数
 		if s.mode == "webvpn" {
