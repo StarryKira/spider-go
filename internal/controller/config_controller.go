@@ -49,3 +49,45 @@ func (h *ConfigController) SetCurrentTerm(c *gin.Context) {
 		"current_term": req.Term,
 	})
 }
+
+// SetSemesterDates 设置学期开学和放假时间（管理员）
+func (h *ConfigController) SetSemesterDates(c *gin.Context) {
+	var req dto.SetSemesterDatesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Error(c, common.CodeInvalidParams, "参数错误")
+		return
+	}
+
+	if err := h.configCache.SetSemesterDates(c.Request.Context(), req.Term, req.StartDate, req.EndDate); err != nil {
+		common.Error(c, common.CodeInvalidParams, err.Error())
+		return
+	}
+
+	common.Success(c, gin.H{
+		"message":    "设置成功",
+		"term":       req.Term,
+		"start_date": req.StartDate,
+		"end_date":   req.EndDate,
+	})
+}
+
+// GetSemesterDates 获取学期开学和放假时间（公开）
+func (h *ConfigController) GetSemesterDates(c *gin.Context) {
+	var req dto.GetSemesterDatesRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		common.Error(c, common.CodeInvalidParams, "参数错误")
+		return
+	}
+
+	startDate, endDate, err := h.configCache.GetSemesterDates(c.Request.Context(), req.Term)
+	if err != nil {
+		common.Error(c, common.CodeInternalError, err.Error())
+		return
+	}
+
+	common.Success(c, gin.H{
+		"term":       req.Term,
+		"start_date": startDate,
+		"end_date":   endDate,
+	})
+}
