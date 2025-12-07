@@ -74,6 +74,9 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 			// 系统配置（仅管理员）
 			adminAuth.POST("/config/term", container.ConfigController.SetCurrentTerm)             // 设置当前学期
 			adminAuth.POST("/config/semester-dates", container.ConfigController.SetSemesterDates) // 设置学期开学和放假时间
+
+			// 群发邮件（仅管理员）
+			adminAuth.POST("/broadcast-email", container.AdminController.BroadcastEmail) // 群发邮件给所有用户
 		}
 	}
 }

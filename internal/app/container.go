@@ -247,6 +247,8 @@ func (c *Container) initServices() {
 	// Admin Service（管理员服务）
 	c.AdminService = service.NewAdminService(
 		c.AdminRepo,
+		c.UserRepo,
+		c.EmailService,
 		c.Config.JWT.Secret,
 		c.Config.JWT.Issuer,
 	)

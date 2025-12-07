@@ -21,27 +21,35 @@ type AdminService interface {
 	InitDefaultAdmin() error
 	// ResetPassword 重置管理员密码，需要管理员登录
 	ResetPassword(ctx context.Context, email string, password string) error
+	// BroadcastEmail 群发邮件给所有用户
+	BroadcastEmail(ctx context.Context, subject string, body string) (int, int, error)
 }
 
 // adminServiceImpl 管理员服务实现
 type adminServiceImpl struct {
-	adminRepo repository.AdminRepository
-	jwtSecret []byte
-	jwtIssuer string
-	jwtExpire time.Duration
+	adminRepo    repository.AdminRepository
+	userRepo     repository.UserRepository
+	emailService EmailService
+	jwtSecret    []byte
+	jwtIssuer    string
+	jwtExpire    time.Duration
 }
 
 // NewAdminService 创建管理员服务
 func NewAdminService(
 	adminRepo repository.AdminRepository,
+	userRepo repository.UserRepository,
+	emailService EmailService,
 	jwtSecret string,
 	jwtIssuer string,
 ) AdminService {
 	return &adminServiceImpl{
-		adminRepo: adminRepo,
-		jwtSecret: []byte(jwtSecret),
-		jwtIssuer: jwtIssuer,
-		jwtExpire: 24 * time.Hour, // 管理员 token 24小时
+		adminRepo:    adminRepo,
+		userRepo:     userRepo,
+		emailService: emailService,
+		jwtSecret:    []byte(jwtSecret),
+		jwtIssuer:    jwtIssuer,
+		jwtExpire:    24 * time.Hour, // 管理员 token 24小时
 	}
 }
 
@@ -141,4 +149,33 @@ func (s *adminServiceImpl) ResetPassword(ctx context.Context, email string, pass
 		return common.NewAppError(common.CodeInternalError, err.Error())
 	}
 	return nil
+}
+
+// BroadcastEmail 群发邮件给所有用户
+// 返回：成功数量、失败数量、错误
+func (s *adminServiceImpl) BroadcastEmail(ctx context.Context, subject string, body string) (int, int, error) {
+	// 获取所有用户的邮箱
+	emails, err := s.userRepo.GetAllUserEmails()
+	if err != nil {
+		return 0, 0, common.NewAppError(common.CodeInternalError, "获取用户邮箱列表失败")
+	}
+
+	if len(emails) == 0 {
+		return 0, 0, common.NewAppError(common.CodeInvalidParams, "没有用户可以发送邮件")
+	}
+
+	// 群发邮件
+	successCount := 0
+	failCount := 0
+
+	for _, email := range emails {
+		err := s.emailService.SendEmail(ctx, email, subject, body)
+		if err != nil {
+			failCount++
+		} else {
+			successCount++
+		}
+	}
+
+	return successCount, failCount, nil
 }
