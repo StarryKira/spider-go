@@ -77,7 +77,7 @@ func NewJwcSessionService(
 func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username, password string) error {
 	var err error
 	// 重试 3 次
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 1; i++ {
 		// 根据模式选择登录函数
 		if s.mode == "webvpn" {
 			err = s.loginAndCacheOnceByWebVPN(ctx, uid, username, password)
@@ -92,7 +92,7 @@ func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username
 		// 重试间隔
 		time.Sleep(time.Second * time.Duration(i+1))
 	}
-	return common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("登录失败，已重试3次: %v", err))
+	return common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("登录失败，请重试，连续三次失败将被锁定: %v", err))
 }
 
 // loginAndCacheOnce 单次登录逻辑
