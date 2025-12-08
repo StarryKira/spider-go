@@ -107,54 +107,95 @@ go mod download
 
 3. **配置文件**
 
-编辑 `config/config.yaml`：
+项目支持多环境配置，已内置开发和生产环境配置文件：
 
+- `config/config.dev.yaml` - 开发环境配置（本地数据库）
+- `config/config.prod.yaml` - 生产环境配置（远程数据库）
+
+**开发环境配置示例** (`config.dev.yaml`)：
 ```yaml
 app:
   port: 8080
+  env: dev
 
 database:
-  source: 127.0.0.1
+  host: 127.0.0.1
   port: 3306
-  user: your_db_user
-  pass: your_db_password
-  name: spider_go
+  user: root
+  pass: dev_password
+  name: spider_go_dev
 
 redis:
   session:
     host: 127.0.0.1:6379
-    pass: your_redis_password
+    pass: ""
     db: 0
   captcha:
     host: 127.0.0.1:6379
+    pass: ""
+    db: 1
+
+jwt:
+  secret: "dev_secret_key_change_in_production"
+  issuer: "spider-go-dev"
+```
+
+**生产环境配置示例** (`config.prod.yaml`)：
+```yaml
+app:
+  port: 8080
+  env: production
+
+database:
+  host: your_production_host
+  port: 3306
+  user: spider-go_prod
+  pass: your_production_password
+  name: spider-go_prod
+
+redis:
+  session:
+    host: your_redis_host:6379
+    pass: your_redis_password
+    db: 0
+  captcha:
+    host: your_redis_host:6379
     pass: your_redis_password
     db: 1
 
 jwt:
-  secret: "your-super-secret-jwt-key"
+  secret: "CHANGE_THIS_TO_A_SECURE_RANDOM_STRING_IN_PRODUCTION"
   issuer: "spider-go"
-
-jwc:
-  login_url: "https://authserver.csuft.edu.cn/authserver/login?service=http%3A%2F%2Fjwgl.csuft.edu.cn%2F"
-  course_url: "http://jwgl.csuft.edu.cn/jsxsd/xskb/xskb_list.do"
-  grade_url: "http://jwgl.csuft.edu.cn/jsxsd/kscj/cjcx_list"
-  grade_level_url: "http://jwgl.csuft.edu.cn/jsxsd/kscj/djkscj_list"
-  exam_url: "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/xsks/xsksap_list"
-
-email:
-  smtp_host: "smtp.qq.com"
-  smtp_port: 465
-  username: "your-email@qq.com"
-  password: "your-smtp-auth-code"
-  from_name: "Spider-Go 验证码"
 ```
 
 4. **运行项目**
+
+默认使用开发环境（`config.dev.yaml`）：
 ```bash
 go run main.go
-# 或编译后运行
+```
+
+使用环境变量指定环境：
+```bash
+# Windows (PowerShell)
+$env:GO_ENV="production"; go run main.go
+
+# Linux/Mac
+export GO_ENV=production
+go run main.go
+```
+
+使用命令行参数指定环境（优先级最高）：
+```bash
+go run main.go -env=production
+# 或
+go run main.go -env=dev
+```
+
+编译后运行：
+```bash
 go build -o spider-go.exe
-./spider-go.exe
+./spider-go.exe -env=production
 ```
 
 5. **访问服务**
@@ -265,15 +306,32 @@ container, err := app.NewContainer("./config")
 
 ## 🔧 开发建议
 
-### 环境变量（生产环境）
+### 环境配置管理
 
-生产环境建议通过环境变量覆盖敏感配置：
+项目通过环境区分开发和生产配置：
 
+**环境指定优先级**：
+1. 命令行参数 `-env=production` （最高优先级）
+2. 环境变量 `GO_ENV=production`
+3. 默认 `dev` 环境
+
+**生产部署示例**：
 ```bash
-export SPIDER_JWT_SECRET="your-production-secret"
-export SPIDER_DB_PASSWORD="your-db-password"
-export SPIDER_REDIS_PASSWORD="your-redis-password"
+# 方式1: 使用命令行参数（推荐）
+./spider-go -env=production
+
+# 方式2: 使用环境变量
+export GO_ENV=production
+./spider-go
+
+# Docker 部署
+docker run -e GO_ENV=production your-image
 ```
+
+**配置文件选择规则**：
+- `GO_ENV=dev` → 加载 `config/config.dev.yaml`
+- `GO_ENV=production` → 加载 `config/config.prod.yaml`
+- 未设置或其他值 → 默认加载 `config/config.dev.yaml`
 
 ### 日志
 

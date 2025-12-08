@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find internal/modules -type d -exec sh -c 'echo \"\"$(find \"\"$1\"\" -maxdepth 1 -type f -name \"\"*.go\"\" | wc -l) files in $1\"\"' _ {} ;)",
+      "Bash(ls internal/service/*.go)",
+      "Bash(ls internal/common/*.go)",
+      "Bash(ls internal/model/*.go)",
+      "Bash(grep \"model\\.\" internal/repository/*.go internal/service/*.go)",
+      "Bash(tree internal -L 2 -I \"*.go\" --dirsfirst)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

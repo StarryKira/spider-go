@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"spider-go/internal/common"
-	"spider-go/internal/service"
+	"spider-go/internal/shared"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +20,7 @@ func AdminAuthMiddleware(secret []byte) gin.HandlerFunc {
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		token, err := jwt.ParseWithClaims(tokenString, &service.AdminClaims{}, func(token *jwt.Token) (any, error) {
+		token, err := jwt.ParseWithClaims(tokenString, &shared.AdminClaims{}, func(token *jwt.Token) (any, error) {
 			return secret, nil
 		})
 
@@ -30,7 +30,7 @@ func AdminAuthMiddleware(secret []byte) gin.HandlerFunc {
 			return
 		}
 
-		claims, ok := token.Claims.(*service.AdminClaims)
+		claims, ok := token.Claims.(*shared.AdminClaims)
 		if !ok || !token.Valid {
 			common.Error(c, common.CodeInvalidToken, "令牌无效")
 			c.Abort()
@@ -45,7 +45,7 @@ func AdminAuthMiddleware(secret []byte) gin.HandlerFunc {
 		}
 
 		// 将管理员信息存入上下文
-		c.Set("admin_uid", claims.Uid)
+		c.Set("aid", claims.Uid)
 		c.Set("admin_name", claims.Name)
 		c.Next()
 	}

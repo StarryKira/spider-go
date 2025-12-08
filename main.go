@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -14,6 +15,15 @@ import (
 )
 
 func main() {
+	// 0. 解析命令行参数
+	env := flag.String("env", "", "运行环境 (dev/production)，默认从 GO_ENV 环境变量读取，未设置则为 dev")
+	flag.Parse()
+
+	// 设置环境变量（命令行优先级高于环境变量）
+	if *env != "" {
+		os.Setenv("GO_ENV", *env)
+	}
+
 	// 1. 创建依赖注入容器（自动完成所有初始化，包括 RSA 公钥）
 	container, err := app.NewContainer("./config")
 	if err != nil {
@@ -24,6 +34,9 @@ func main() {
 			log.Printf("关闭资源失败: %v", err)
 		}
 	}()
+
+	// 输出当前运行环境
+	log.Printf("运行环境: %s", container.Config.App.Env)
 
 	// 2. 启动定时任务调度器
 	scheduler := app.NewScheduler(container.TaskService, container.RSAKeyService)
