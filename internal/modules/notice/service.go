@@ -12,8 +12,8 @@ var (
 
 // Service 通知服务接口
 type Service interface {
-	Create(ctx context.Context, req *CreateNoticeRequest) (*Notice, error)
-	Update(ctx context.Context, nid int, req *UpdateNoticeRequest) (*Notice, error)
+	Create(ctx context.Context, content, noticeType string, isShow, isTop, isHtml bool) (*Notice, error)
+	Update(ctx context.Context, nid int, content, noticeType string, isShow, isTop, isHtml bool) (*Notice, error)
 	Delete(ctx context.Context, nid int) error
 	GetByID(ctx context.Context, nid int) (*Notice, error)
 	GetAll(ctx context.Context) ([]*Notice, error)
@@ -33,17 +33,17 @@ func NewService(repo Repository) Service {
 }
 
 // Create 创建通知
-func (s *service) Create(ctx context.Context, req *CreateNoticeRequest) (*Notice, error) {
-	if req.Content == "" {
+func (s *service) Create(ctx context.Context, content, noticeType string, isShow, isTop, isHtml bool) (*Notice, error) {
+	if content == "" {
 		return nil, ErrEmptyContent
 	}
 
 	notice := &Notice{
-		Content:    req.Content,
-		NoticeType: req.NoticeType,
-		IsShow:     req.IsShow,
-		IsTop:      req.IsTop,
-		IsHtml:     req.IsHtml,
+		Content:    content,
+		NoticeType: noticeType,
+		IsShow:     isShow,
+		IsTop:      isTop,
+		IsHtml:     isHtml,
 		CreateTime: time.Now(),
 		UpdateTime: time.Now(),
 	}
@@ -56,8 +56,8 @@ func (s *service) Create(ctx context.Context, req *CreateNoticeRequest) (*Notice
 }
 
 // Update 更新通知
-func (s *service) Update(ctx context.Context, nid int, req *UpdateNoticeRequest) (*Notice, error) {
-	if req.Content == "" {
+func (s *service) Update(ctx context.Context, nid int, content, noticeType string, isShow, isTop, isHtml bool) (*Notice, error) {
+	if content == "" {
 		return nil, ErrEmptyContent
 	}
 
@@ -68,11 +68,11 @@ func (s *service) Update(ctx context.Context, nid int, req *UpdateNoticeRequest)
 	}
 
 	// 更新字段
-	notice.Content = req.Content
-	notice.NoticeType = req.NoticeType
-	notice.IsShow = req.IsShow
-	notice.IsTop = req.IsTop
-	notice.IsHtml = req.IsHtml
+	notice.Content = content
+	notice.NoticeType = noticeType
+	notice.IsShow = isShow
+	notice.IsTop = isTop
+	notice.IsHtml = isHtml
 	notice.UpdateTime = time.Now()
 
 	if err := s.repo.Update(ctx, notice); err != nil {

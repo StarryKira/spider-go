@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"net/http"
 	"spider-go/internal/common"
 
 	"github.com/gin-gonic/gin"
@@ -48,7 +47,7 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.service.Login(c.Request.Context(), &req)
+	token, admin, err := h.service.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		if err == ErrInvalidCredentials {
 			common.Error(c, common.CodeInvalidPassword, err.Error())
@@ -58,7 +57,10 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	common.Success(c, resp)
+	common.Success(c, LoginResponse{
+		Token: token,
+		Admin: admin.ToResponse(),
+	})
 }
 
 // GetInfo 获取管理员信息
@@ -74,13 +76,13 @@ func (h *Handler) GetInfo(c *gin.Context) {
 		return
 	}
 
-	adminInfo, err := h.service.GetAdminInfo(c.Request.Context(), aid.(int))
+	admin, err := h.service.GetAdminInfo(c.Request.Context(), aid.(int))
 	if err != nil {
 		common.Error(c, common.CodeUserNotFound, "获取管理员信息失败")
 		return
 	}
 
-	common.Success(c, adminInfo)
+	common.Success(c, admin.ToResponse())
 }
 
 // ChangePassword 修改密码
@@ -104,7 +106,7 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.ChangePassword(c.Request.Context(), aid.(int), &req); err != nil {
+	if err := h.service.ChangePassword(c.Request.Context(), aid.(int), req.OldPassword, req.NewPassword); err != nil {
 		if err == ErrInvalidPassword {
 			common.Error(c, common.CodeInvalidPassword, err.Error())
 		} else {
@@ -113,7 +115,7 @@ func (h *Handler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "密码修改成功"})
+	common.Success(c, gin.H{"message": "密码修改成功"})
 }
 
 // BroadcastEmail 群发邮件
@@ -131,11 +133,15 @@ func (h *Handler) BroadcastEmail(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.service.BroadcastEmail(c.Request.Context(), &req)
+	successCount, failCount, totalCount, err := h.service.BroadcastEmail(c.Request.Context(), req.Subject, req.Content)
 	if err != nil {
 		common.Error(c, common.CodeInternalError, err.Error())
 		return
 	}
 
-	common.Success(c, resp)
+	common.Success(c, BroadcastEmailResponse{
+		SuccessCount: successCount,
+		FailCount:    failCount,
+		TotalCount:   totalCount,
+	})
 }

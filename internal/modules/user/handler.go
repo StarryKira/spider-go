@@ -57,7 +57,8 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.Register(c.Request.Context(), &req); err != nil {
+	token, err := h.service.Register(c.Request.Context(), req.Email, req.Password, req.Name, req.Captcha)
+	if err != nil {
 		if err == ErrEmailAlreadyExists {
 			common.Error(c, common.CodeUserAlreadyExists, err.Error())
 		} else if err == ErrInvalidCaptcha {
@@ -68,7 +69,10 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "注册成功"})
+	common.Success(c, gin.H{
+		"token":   token,
+		"message": "注册成功",
+	})
 }
 
 // Login 用户登录
@@ -86,7 +90,7 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.service.Login(c.Request.Context(), &req)
+	token, user, err := h.service.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		if err == ErrInvalidCredentials {
 			common.Error(c, common.CodeInvalidPassword, err.Error())
@@ -96,7 +100,10 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	common.Success(c, resp)
+	common.Success(c, LoginResponse{
+		Token: token,
+		User:  user.ToResponse(),
+	})
 }
 
 // ResetPassword 重置密码
@@ -114,7 +121,7 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.ResetPassword(c.Request.Context(), &req); err != nil {
+	if err := h.service.ResetPassword(c.Request.Context(), req.Email, req.Password, req.Captcha); err != nil {
 		if err == ErrUserNotFound {
 			common.Error(c, common.CodeUserNotFound, err.Error())
 		} else if err == ErrInvalidCaptcha {
@@ -125,7 +132,7 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "密码重置成功"})
+	common.Success(c, gin.H{"message": "密码重置成功"})
 }
 
 // GetUserInfo 获取用户信息
@@ -141,13 +148,13 @@ func (h *Handler) GetUserInfo(c *gin.Context) {
 		return
 	}
 
-	userInfo, err := h.service.GetUserInfo(c.Request.Context(), uid.(int))
+	user, err := h.service.GetUserInfo(c.Request.Context(), uid.(int))
 	if err != nil {
 		common.Error(c, common.CodeUserNotFound, "获取用户信息失败")
 		return
 	}
 
-	common.Success(c, userInfo)
+	common.Success(c, user.ToResponse())
 }
 
 // BindJwc 绑定教务系统
@@ -171,7 +178,7 @@ func (h *Handler) BindJwc(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.BindJwc(c.Request.Context(), uid.(int), &req); err != nil {
+	if err := h.service.BindJwc(c.Request.Context(), uid.(int), req.Sid, req.Spwd); err != nil {
 		if err == ErrEmptyParams {
 			common.Error(c, common.CodeInvalidParams, err.Error())
 		} else {
@@ -180,7 +187,7 @@ func (h *Handler) BindJwc(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "绑定成功"})
+	common.Success(c, gin.H{"message": "绑定成功"})
 }
 
 // CheckIsBind 检查绑定状态
