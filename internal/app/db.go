@@ -2,7 +2,9 @@ package app
 
 import (
 	"fmt"
-	"spider-go/internal/model"
+	"spider-go/internal/modules/admin"
+	"spider-go/internal/modules/notice"
+	"spider-go/internal/modules/user"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -18,8 +20,8 @@ func InitDBWithConfig(config *Config) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	// 自动迁移
-	if err := db.AutoMigrate(&model.User{}, &model.Notice{}, &model.Administrator{}); err != nil {
+	// 自动迁移（使用新模块中的模型）
+	if err := db.AutoMigrate(&user.User{}, &notice.Notice{}, &admin.Admin{}); err != nil {
 		return nil, err
 	}
 

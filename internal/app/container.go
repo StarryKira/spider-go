@@ -5,10 +5,15 @@ import (
 	"fmt"
 	"log"
 	"spider-go/internal/cache"
-	"spider-go/internal/controller"
 	"spider-go/internal/middleware"
-	"spider-go/internal/repository"
+	"spider-go/internal/modules/admin"
+	"spider-go/internal/modules/course"
+	"spider-go/internal/modules/exam"
+	"spider-go/internal/modules/grade"
+	"spider-go/internal/modules/notice"
+	"spider-go/internal/modules/user"
 	"spider-go/internal/service"
+	"spider-go/internal/shared"
 	"strconv"
 	"strings"
 
@@ -29,10 +34,8 @@ type Container struct {
 	// 中间件
 	CORSMiddleware gin.HandlerFunc
 
-	// Repositories
-	UserRepo   repository.UserRepository
-	AdminRepo  repository.AdminRepository
-	NoticeRepo repository.NoticeRepository
+	// 共享查询服务
+	UserQuery shared.UserQuery
 
 	// Caches
 	SessionCache  cache.SessionCache
@@ -41,33 +44,22 @@ type Container struct {
 	ConfigCache   cache.ConfigCache
 	UserDataCache cache.UserDataCache
 
-	// Services
-	RSAKeyService        service.RSAKeyService
-	SessionService       service.SessionService
-	CrawlerService       service.CrawlerService
-	EmailService         service.EmailService
-	CaptchaService       service.CaptchaService
-	DAUService           service.DAUService
-	AdminService         service.AdminService
-	NoticeService        service.NoticeService
-	UserService          service.UserService
-	CourseService        service.CourseService
-	GradeService         service.GradeService
-	ExamService          service.ExamService
-	GradeAnalysisService service.GradeAnalysisService
-	TaskService          service.TaskService
+	// Services (infrastructure services only)
+	RSAKeyService  service.RSAKeyService
+	SessionService service.SessionService
+	CrawlerService service.CrawlerService
+	EmailService   service.EmailService
+	CaptchaService service.CaptchaService
+	DAUService     service.DAUService
+	TaskService    service.TaskService
 
-	// Controllers
-	UserController          *controller.UserController
-	CourseController        *controller.CourseController
-	GradeController         *controller.GradeController
-	ExamController          *controller.ExamController
-	CaptchaController       *controller.CaptchaController
-	StatisticsController    *controller.StatisticsController
-	AdminController         *controller.AdminController
-	NoticeController        *controller.NoticeController
-	GradeAnalysisController *controller.GradeAnalysisController
-	ConfigController        *controller.ConfigController
+	// Modules (new architecture)
+	UserModule   *user.Module
+	AdminModule  *admin.Module
+	GradeModule  *grade.Module
+	CourseModule *course.Module
+	ExamModule   *exam.Module
+	NoticeModule *notice.Module
 }
 
 // NewContainer 创建依赖注入容器
@@ -89,8 +81,8 @@ func NewContainer(configPath string) (*Container, error) {
 		return nil, fmt.Errorf("初始化Redis失败: %w", err)
 	}
 
-	// 初始化 Repositories
-	c.initRepositories()
+	// 初始化共享查询服务
+	c.initSharedServices()
 
 	// 初始化 Caches
 	c.initCaches()
@@ -101,8 +93,8 @@ func NewContainer(configPath string) (*Container, error) {
 	// 初始化中间件
 	c.initMiddlewares()
 
-	// 初始化 Controllers
-	c.initControllers()
+	// 初始化 Modules
+	c.initModules()
 
 	// 初始化 RSA 公钥（首次获取）
 	if err := c.initRSAPublicKey(); err != nil {
@@ -110,7 +102,7 @@ func NewContainer(configPath string) (*Container, error) {
 	}
 
 	// 初始化默认管理员（如果不存在）
-	if err := c.AdminService.InitDefaultAdmin(); err != nil {
+	if err := c.AdminModule.GetService().InitDefaultAdmin(context.Background()); err != nil {
 		return nil, fmt.Errorf("初始化默认管理员失败: %w", err)
 	}
 
@@ -181,11 +173,9 @@ func (c *Container) createRedisClient(config RedisConfig) (*redis.Client, error)
 	return client, nil
 }
 
-// initRepositories 初始化 Repositories
-func (c *Container) initRepositories() {
-	c.UserRepo = repository.NewGormUserRepository(c.DB)
-	c.AdminRepo = repository.NewGormAdminRepository(c.DB)
-	c.NoticeRepo = repository.NewGormNoticeRepository(c.DB)
+// initSharedServices 初始化共享服务
+func (c *Container) initSharedServices() {
+	c.UserQuery = shared.NewUserQuery(c.DB)
 }
 
 // initCaches 初始化 Caches
@@ -202,7 +192,7 @@ func (c *Container) initCaches() {
 	c.UserDataCache = cache.NewRedisUserDataCache(c.SessionRedis)
 }
 
-// initServices 初始化 Services
+// initServices 初始化 Services（仅基础设施服务）
 func (c *Container) initServices() {
 	// 获取当前模式的配置
 	currentMode := c.Config.Jwc.GetCurrentModeConfig()
@@ -244,71 +234,11 @@ func (c *Container) initServices() {
 	// DAU Service（日活统计服务）
 	c.DAUService = service.NewDAUService(c.DAUCache)
 
-	// Admin Service（管理员服务）
-	c.AdminService = service.NewAdminService(
-		c.AdminRepo,
-		c.UserRepo,
-		c.EmailService,
-		c.Config.JWT.Secret,
-		c.Config.JWT.Issuer,
-	)
-
-	// Notice Service（通知服务）
-	c.NoticeService = service.NewNoticeService(c.NoticeRepo)
-
-	// User Service
-	c.UserService = service.NewUserService(
-		c.UserRepo,
-		c.SessionService,
-		c.CaptchaService,
-		c.CaptchaCache,
-		c.DAUService,
-		c.Config.JWT.Secret,
-		c.Config.JWT.Issuer,
-	)
-
-	// Course Service（使用当前模式的 URL）
-	c.CourseService = service.NewCourseService(
-		c.UserRepo,
-		c.SessionService,
-		c.CrawlerService,
-		c.UserDataCache,
-		currentMode.CourseURL,
-	)
-
-	// Grade Service（使用当前模式的 URL）
-	c.GradeService = service.NewGradeService(
-		c.UserRepo,
-		c.SessionService,
-		c.CrawlerService,
-		c.UserDataCache,
-		currentMode.GradeURL,
-		currentMode.GradeLevelURL,
-	)
-
-	// Exam Service（使用当前模式的 URL）
-	c.ExamService = service.NewExamService(
-		c.UserRepo,
-		c.SessionService,
-		c.CrawlerService,
-		c.UserDataCache,
-		currentMode.ExamURL,
-	)
-
-	// Grade Analysis Service（成绩分析服务）
-	c.GradeAnalysisService = service.NewGradeAnalysisService(
-		c.GradeService,
-		c.ConfigCache,
-	)
-
 	// Task Service（定时任务服务）
+	// TODO: 需要重构以适应新的模块架构
 	c.TaskService = service.NewTaskService(
-		c.UserRepo,
 		c.DAUCache,
 		c.SessionService,
-		c.CourseService,
-		c.GradeService,
-		c.ExamService,
 		c.UserDataCache,
 		c.ConfigCache,
 	)
@@ -327,18 +257,61 @@ func (c *Container) initMiddlewares() {
 	)
 }
 
-// initControllers 初始化 Controllers
-func (c *Container) initControllers() {
-	c.UserController = controller.NewUserController(c.UserService)
-	c.CourseController = controller.NewCourseController(c.CourseService)
-	c.GradeController = controller.NewGradeController(c.GradeService)
-	c.ExamController = controller.NewExamController(c.ExamService)
-	c.CaptchaController = controller.NewCaptchaController(c.CaptchaService)
-	c.StatisticsController = controller.NewStatisticsController(c.DAUService)
-	c.AdminController = controller.NewAdminController(c.AdminService)
-	c.NoticeController = controller.NewNoticeController(c.NoticeService)
-	c.GradeAnalysisController = controller.NewGradeAnalysisController(c.GradeAnalysisService)
-	c.ConfigController = controller.NewConfigController(c.ConfigCache)
+// initModules 初始化模块
+func (c *Container) initModules() {
+	// 获取当前模式的配置
+	currentMode := c.Config.Jwc.GetCurrentModeConfig()
+
+	// User Module（用户模块）
+	c.UserModule = user.NewModule(
+		c.DB,
+		c.SessionService,
+		c.CaptchaService,
+		c.CaptchaCache,
+		c.DAUService,
+		c.Config.JWT.Secret,
+		c.Config.JWT.Issuer,
+	)
+
+	// Admin Module（管理员模块）
+	c.AdminModule = admin.NewModule(
+		c.DB,
+		c.UserQuery,
+		c.EmailService,
+		c.Config.JWT.Secret,
+		c.Config.JWT.Issuer,
+	)
+
+	// Grade Module（成绩模块）
+	c.GradeModule = grade.NewModule(
+		c.UserQuery,
+		c.SessionService,
+		c.CrawlerService,
+		c.UserDataCache,
+		currentMode.GradeURL,
+		currentMode.GradeLevelURL,
+	)
+
+	// Course Module（课程模块）
+	c.CourseModule = course.NewModule(
+		c.UserQuery,
+		c.SessionService,
+		c.CrawlerService,
+		c.UserDataCache,
+		currentMode.CourseURL,
+	)
+
+	// Exam Module（考试模块）
+	c.ExamModule = exam.NewModule(
+		c.UserQuery,
+		c.SessionService,
+		c.CrawlerService,
+		c.UserDataCache,
+		currentMode.ExamURL,
+	)
+
+	// Notice Module（通知模块）
+	c.NoticeModule = notice.NewModule(c.DB)
 }
 
 // initRSAPublicKey 初始化 RSA 公钥

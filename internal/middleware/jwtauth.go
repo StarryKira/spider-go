@@ -3,6 +3,7 @@ package middleware
 import (
 	"spider-go/internal/common"
 	"spider-go/internal/service"
+	"spider-go/internal/shared"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +21,7 @@ func AuthMiddleWare(secret []byte, dauService service.DAUService) gin.HandlerFun
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		token, err := jwt.ParseWithClaims(tokenString, &service.Claims{}, func(token *jwt.Token) (any, error) {
+		token, err := jwt.ParseWithClaims(tokenString, &shared.UserClaims{}, func(token *jwt.Token) (any, error) {
 			return secret, nil
 		})
 
@@ -30,7 +31,7 @@ func AuthMiddleWare(secret []byte, dauService service.DAUService) gin.HandlerFun
 			return
 		}
 
-		claims, ok := token.Claims.(*service.Claims)
+		claims, ok := token.Claims.(*shared.UserClaims)
 		if !ok || !token.Valid {
 			common.Error(c, common.CodeInvalidToken, "令牌无效")
 			c.Abort()

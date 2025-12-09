@@ -1,8 +1,10 @@
 package api
 
 import (
+	"net/http"
 	"spider-go/internal/app"
 	"spider-go/internal/middleware"
+	"spider-go/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,71 +14,87 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 	// JWT secret
 	secret := []byte(container.Config.JWT.Secret)
 
+	// API 根路由组
 	api := r.Group("/api")
 	{
-		// 公开接口
-		api.POST("/login", container.UserController.Login)
-		api.POST("/register", container.UserController.Register)
-		api.POST("/reset", container.UserController.ResetPassword)
-
+		// ========== 公开接口 ==========
 		// 验证码接口（公开）
-		api.POST("/captcha/send", container.CaptchaController.SendEmailCaptcha) // 发送验证码
-
-		// 通知接口（公开 - 查看）
-		api.GET("/notices", container.NoticeController.GetVisibleNotices) // 获取可见通知
-
-		// 系统配置（公开 - 查看）
-		api.GET("/config/term", container.ConfigController.GetCurrentTerm)             // 获取当前学期
-		api.GET("/config/semester-dates", container.ConfigController.GetSemesterDates) // 获取学期开学和放假时间
-	}
-
-	// 需要认证的接口（普通用户）
-	user := api.Group("/user")
-	user.Use(middleware.AuthMiddleWare(secret, container.DAUService))
-	{
-		user.POST("/bind", container.UserController.BindJwcAccount) // 绑定教务系统账号
-		user.GET("/info", container.UserController.GetUserInfo)     // 获取用户信息
-		user.GET("/isbind", container.UserController.CheckIsBind)   // 检查是否绑定教务系统账号
-
-		// 成绩相关接口（RESTful 规范）
-		user.GET("/grades", container.GradeController.GetGrades)                               // 获取成绩（query: term 可选）
-		user.GET("/grades/level", container.GradeController.GetLevelGrade)                     // 获取等级考试成绩
-		user.GET("/grades/analysis", container.GradeAnalysisController.GetRecentTermsAnalysis) // 获取成绩分析
-
-		// 课程和考试（RESTful 规范）
-		user.GET("/courses", container.CourseController.GetCourses) // 获取课程表（query: week, term）
-		user.GET("/exams", container.ExamController.GetExams)       // 获取考试安排（query: term）
-	}
-
-	// 管理员接口
-	admin := api.Group("/admin")
-	{
-		// 管理员登录（公开）
-		admin.POST("/login", container.AdminController.Login)
-
-		// 需要管理员认证的接口
-		adminAuth := admin.Group("")
-		adminAuth.Use(middleware.AdminAuthMiddleware(secret))
+		captchaGroup := api.Group("/captcha")
 		{
-			// 管理员信息
-			adminAuth.GET("/info", container.AdminController.GetInfo)
-			adminAuth.POST("/reset", container.AdminController.ChangePwd)
-			// 通知管理
-			adminAuth.POST("/notices", container.NoticeController.CreateNotice)        // 创建通知
-			adminAuth.PUT("/notices/:nid", container.NoticeController.UpdateNotice)    // 更新通知
-			adminAuth.DELETE("/notices/:nid", container.NoticeController.DeleteNotice) // 删除通知
-			adminAuth.GET("/notices", container.NoticeController.GetAllNotices)        // 获取所有通知
-
-			// 日活统计（仅管理员）
-			adminAuth.GET("/statistics/dau", container.StatisticsController.GetDAUStatistics)  // 获取日活统计
-			adminAuth.GET("/statistics/dau/range", container.StatisticsController.GetDAURange) // 获取日活范围统计
-
-			// 系统配置（仅管理员）
-			adminAuth.POST("/config/term", container.ConfigController.SetCurrentTerm)             // 设置当前学期
-			adminAuth.POST("/config/semester-dates", container.ConfigController.SetSemesterDates) // 设置学期开学和放假时间
-
-			// 群发邮件（仅管理员）
-			adminAuth.POST("/broadcast-email", container.AdminController.BroadcastEmail) // 群发邮件给所有用户
+			captchaGroup.POST("/send", sendEmailCaptchaHandler(container.CaptchaService))
 		}
+
+		// 系统配置（公开 - 只读）
+		// TODO: 需要重新实现这些端点以匹配实际的服务接口
+		// configGroup := api.Group("/config")
+		// {
+		// 	configGroup.GET("/term", getCurrentTermHandler(container.ConfigCache))
+		// 	configGroup.GET("/semester-dates", getSemesterDatesHandler(container.ConfigCache))
+		// }
+
+		// ========== 用户路由 ==========
+		// 需要认证的用户接口
+		userAuth := api.Group("/user")
+		userAuth.Use(middleware.AuthMiddleWare(secret, container.DAUService))
+
+		// 注册用户模块路由（包含公开和认证路由）
+		container.UserModule.RegisterRoutes(api, userAuth)
+
+		// ========== 管理员路由 ==========
+		// 需要管理员认证的接口
+		adminAuth := api.Group("/admin")
+		adminAuth.Use(middleware.AdminAuthMiddleware(secret))
+
+		// 注册管理员模块路由（包含公开和认证路由）
+		container.AdminModule.RegisterRoutes(api, adminAuth)
+
+		// 管理员专属功能 - 统计和配置
+		// TODO: 需要重新实现这些端点以匹配实际的服务接口
+		// adminAuth.GET("/statistics/dau", getDAUStatisticsHandler(container.DAUService))
+		// adminAuth.GET("/statistics/dau/range", getDAURangeHandler(container.DAUService))
+		// adminAuth.POST("/config/term", setCurrentTermHandler(container.ConfigCache))
+		// adminAuth.POST("/config/semester-dates", setSemesterDatesHandler(container.ConfigCache))
+
+		// ========== 业务模块路由 ==========
+		// 成绩模块
+		container.GradeModule.RegisterRoutes(userAuth)
+
+		// 课程模块
+		container.CourseModule.RegisterRoutes(userAuth)
+
+		// 考试模块
+		container.ExamModule.RegisterRoutes(userAuth)
+
+		// 通知模块（包含公开和管理员路由）
+		container.NoticeModule.RegisterRoutes(api, adminAuth)
 	}
 }
+
+// ========== 验证码处理器 ==========
+
+type sendEmailCaptchaRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+func sendEmailCaptchaHandler(captchaService service.CaptchaService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req sendEmailCaptchaRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+			return
+		}
+
+		if err := captchaService.SendEmailCaptcha(c.Request.Context(), req.Email); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "发送验证码失败"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "验证码已发送"})
+	}
+}
+
+// ========== DAU 统计处理器 ==========
+// TODO: 需要重新实现以匹配实际的服务接口
+
+// ========== 系统配置处理器 ==========
+// TODO: 需要重新实现以匹配实际的服务接口

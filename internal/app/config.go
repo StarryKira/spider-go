@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/viper"
 )
@@ -18,7 +19,8 @@ type Config struct {
 }
 
 type Appconfig struct {
-	Port int `yaml:"port" mapstructure:"port"`
+	Port int    `yaml:"port" mapstructure:"port"`
+	Env  string `yaml:"env" mapstructure:"env"` // 环境：dev, production
 }
 
 // CORSConfig CORS 跨域配置
@@ -103,13 +105,23 @@ type DdddOCRConfig struct {
 var Conf *Config
 
 // LoadConfigFromPath 从指定路径加载配置
+// 支持通过 GO_ENV 环境变量指定环境（dev/production），默认为 dev
 func LoadConfigFromPath(configPath string) (*Config, error) {
 	viper.AddConfigPath(configPath)
-	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 
+	// 从环境变量获取环境配置，默认为 dev
+	env := GetEnv()
+	configName := fmt.Sprintf("config.%s", env)
+	viper.SetConfigName(configName)
+
+	// 尝试读取环境特定的配置文件
 	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("Load config failed: %s", err)
+		// 如果环境特定配置不存在，尝试读取默认 config.yaml
+		viper.SetConfigName("config")
+		if err := viper.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("Load config failed: %s", err)
+		}
 	}
 
 	config := &Config{}
@@ -118,4 +130,20 @@ func LoadConfigFromPath(configPath string) (*Config, error) {
 	}
 
 	return config, nil
+}
+
+// GetEnv 获取当前环境（dev/production）
+// 优先级：GO_ENV 环境变量 > 默认值(dev)
+func GetEnv() string {
+	env := os.Getenv("GO_ENV")
+	if env == "" {
+		env = "dev"
+	}
+
+	// 只允许 dev 和 production
+	if env != "dev" && env != "production" {
+		return "dev"
+	}
+
+	return env
 }

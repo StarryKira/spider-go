@@ -35,30 +35,76 @@ The application uses GORM with auto-migration. Database tables are created autom
 
 ## Architecture
 
+⚠️ **IMPORTANT: This project is undergoing a major refactoring** from Java-style (layered) to Go-style (domain-driven) architecture. See `REFACTORING_GUIDE.md` for details.
+
+### Current Architecture (Hybrid)
+
+The project currently supports **both old and new structures**:
+
+#### 🆕 New Structure (Recommended for new features)
+```
+internal/
+├── modules/              # Domain-driven modules
+│   ├── grade/            # Grade module ✅
+│   │   ├── model.go
+│   │   ├── service.go
+│   │   ├── handler.go
+│   │   └── module.go
+│   ├── evaluation/       # Evaluation module ✅
+│   ├── user/             # User module ✅
+│   └── [others]/         # To be migrated
+├── app/                  # App initialization
+├── middleware/           # Middleware
+└── shared/               # Shared utilities
+
+pkg/                      # Reusable libraries
+├── httpclient/
+├── cache/
+├── crypto/
+└── logger/
+```
+
+#### 🔄 Old Structure (Being phased out)
+```
+internal/
+├── controller/  # HTTP handlers (old)
+├── service/     # Business logic (old)
+├── repository/  # Data access (old)
+├── dto/         # DTOs (old)
+└── common/      # Common utilities (migrating to shared/)
+```
+
 ### Dependency Injection Container
+
 The entire application is built around a centralized dependency injection container (`internal/app/container.go`). **Never use global variables** - all dependencies flow through the container:
 
 1. **Initialization order** (in `NewContainer`):
-   - Config → DB → Redis → Repositories → Caches → Services → Middlewares → Controllers
+   - Config → DB → Redis → Repositories → Caches → Services → Modules
    - RSA public key fetched on startup
    - Default admin created if not exists
 
-2. **Adding new components**: Follow the existing pattern:
-   - Add field to `Container` struct
-   - Create initialization method (`initXxx`)
-   - Call in proper order in `NewContainer`
+2. **Adding new components**:
+   - **For new modules**: Create in `internal/modules/yourmodule/` (see `REFACTORING_GUIDE.md`)
+   - **For old-style**: Follow existing pattern in container (not recommended)
 
-### Layered Architecture
+### New Module Architecture (Recommended)
+
+Each module in `internal/modules/` follows this structure:
 
 ```
-Routes (Gin) → Controllers → Services → Repositories/Caches/Crawler → DB/Redis/HTTP
+yourmodule/
+├── model.go       # Data models and DTOs
+├── repository.go  # Database operations (if needed)
+├── service.go     # Business logic
+├── handler.go     # HTTP handlers
+└── module.go      # Module assembly and DI
 ```
 
-- **Controllers** (`internal/controller`): HTTP request/response handling only
-- **Services** (`internal/service`): All business logic lives here
-- **Repositories** (`internal/repository`): Database access (GORM)
-- **Caches** (`internal/cache`): Redis operations
-- **DTOs** (`internal/dto`): Request/response data structures
+**Benefits:**
+- High cohesion: all related code in one place
+- Clear boundaries: easy to understand what belongs where
+- Easy maintenance: modify a feature in one location
+- Independent testing: each module can be tested in isolation
 
 ### Configuration System
 
@@ -156,13 +202,36 @@ func (s *gradeService) GetAllGrades(ctx context.Context, uid int) ([]Grade, erro
 
 ## Common Tasks
 
-### Adding a New API Endpoint
+### Adding a New Module (Recommended for new features)
+
+**Follow the Go-style module pattern:**
+
+1. **Create module directory**: `internal/modules/yourmodule/`
+2. **Create files**:
+   - `model.go` - Data models and DTOs
+   - `service.go` - Business logic interface and implementation
+   - `handler.go` - HTTP handlers
+   - `module.go` - Module assembly
+3. **Implement service**:
+   ```go
+   type Service interface {
+       YourMethod(ctx context.Context, ...) (result, error)
+   }
+   ```
+4. **Register in container**: Add module initialization in `internal/app/container.go`
+5. **Register routes**: Add `module.RegisterRoutes(r)` in routing setup
+
+**See `REFACTORING_GUIDE.md` for detailed steps and examples.**
+
+### Adding a New API Endpoint (Old style - not recommended)
 
 1. **Define DTO** in `internal/dto/xxx_request.go`
 2. **Add service method** in `internal/service/xxx_service.go`
 3. **Add controller method** in `internal/controller/xxx_controller.go`
 4. **Register route** in `internal/api/routes.go`
 5. **Update container** if new service is needed
+
+⚠️ **For new features, use the module-based approach instead.**
 
 ### Adding Redis Cache
 

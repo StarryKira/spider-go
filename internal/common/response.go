@@ -17,16 +17,13 @@ type Response struct {
 func Success(c *gin.Context, data interface{}) {
 	c.JSON(http.StatusOK, Response{
 		Code:    CodeSuccess,
-		Message: GetErrorMessage(CodeSuccess),
+		Message: "success",
 		Data:    data,
 	})
 }
 
 // Error 错误响应
 func Error(c *gin.Context, code int, message string) {
-	if message == "" {
-		message = GetErrorMessage(code)
-	}
 	c.JSON(http.StatusOK, Response{
 		Code:    code,
 		Message: message,

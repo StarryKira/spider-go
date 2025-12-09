@@ -1,0 +1,88 @@
+# 生产环境配置
+app:
+  port: 8080
+  env: production
+cors:
+  # CORS 跨域配置
+  allow_origins:
+    - "https://starrykira.xyz"
+    - "https://console.starrykira.xyz"
+    - "https://api.starrykira.xyz"
+  allow_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"
+  allow_headers:
+    - "Origin"
+    - "Content-Type"
+    - "Authorization"
+    - "Accept"
+  expose_headers:
+    - "Content-Length"
+  allow_credentials: true
+  max_age: 43200  # 12小时
+
+# 生产数据库配置
+database:
+  driver: mysql
+  host: 129.204.200.248
+  port: 3306
+  user: spider-go_prod
+  pass: your_production_password_here
+  name: spider-go_prod
+
+# 生产 Redis 配置
+redis:
+  # 会话缓存数据库
+  session:
+    host: 129.204.200.248:6379
+    pass: your_redis_password_here
+    db: 0
+  # 验证码数据库
+  captcha:
+    host: 129.204.200.248:6379
+    pass: your_redis_password_here
+    db: 1
+
+jwt:
+  secret: "CHANGE_THIS_TO_A_SECURE_RANDOM_STRING_IN_PRODUCTION"
+  issuer: "spider-go"
+
+jwc:
+  # 登录模式：campus（校园网内） 或 webvpn（外网 WebVPN）
+  mode: "webvpn"  # 生产环境默认使用 webvpn 模式
+
+  # 校园网内配置
+  campus:
+    login_url: "https://cas.csuft.edu.cn/cas/login?service=https%3A%2F%2Fportal.csuft.edu.cn%2F%3Fpath%3Dhttps%253A%252F%252Fportal.csuft.edu.cn%252Fmain.html%2523%252F"
+    redirect_url: "http://jwgl.csuft.edu.cn/Logon.do?method=logonByZnlkd"
+    course_url: "http://jwgl.csuft.edu.cn/jsxsd/xskb/xskb_list.do"
+    grade_url: "http://jwgl.csuft.edu.cn/jsxsd/kscj/cjcx_list"
+    grade_level_url: "http://jwgl.csuft.edu.cn/jsxsd/kscj/djkscj_list"
+    exam_url: "http://jwgl.csuft.edu.cn/jsxsd/xsks/xsksap_list"
+
+  # WebVPN 配置
+  webvpn:
+    login_url: "https://https-cas-csuft-edu-cn-443.webvpn.csuft.edu.cn/cas/login?service=https://webvpn.csuft.edu.cn/callback/cas/eAF0IG5N"
+    webvpn_token_url: "https://webvpn.csuft.edu.cn/api/access/auth/finish"
+    redirect_url: "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/Logon.do?method=logonByZnlkd"
+    course_url: "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/xskb/xskb_list.do"
+    grade_url: "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/kscj/cjcx_list"
+    grade_level_url: "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/kscj/djkscj_list"
+    exam_url: "https://http-jwgl-csuft-edu-cn-80.webvpn.csuft.edu.cn/jsxsd/xsks/xsksap_list"
+
+  # 公共配置
+  rsa_url: "https://cas.csuft.edu.cn/cas/jwt/publicKey"
+  captcha_url: "https://cas.csuft.edu.cn/cas/needCaptcha.html?"
+  captcha_image_url: "https://cas.csuft.edu.cn/cas/captcha.html?"
+
+email:
+  # SMTP 邮件服务器配置（生产环境）
+  smtp_host: "smtp.qq.com"
+  smtp_port: 465
+  username: "1628615876@qq.com"
+  password: "kwxuotnueozvdjeb"
+  from_name: "Spider-Go 验证码"
+
