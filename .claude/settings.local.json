@@ -1,12 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find internal/modules -type d -exec sh -c 'echo \"\"$(find \"\"$1\"\" -maxdepth 1 -type f -name \"\"*.go\"\" | wc -l) files in $1\"\"' _ {} ;)",
-      "Bash(ls internal/service/*.go)",
-      "Bash(ls internal/common/*.go)",
-      "Bash(ls internal/model/*.go)",
-      "Bash(grep \"model\\.\" internal/repository/*.go internal/service/*.go)",
-      "Bash(tree internal -L 2 -I \"*.go\" --dirsfirst)"
+      "Bash(ls -la internal/service/*.go)",
+      "Bash(cat pkg/logger/*.go)",
+      "Bash(cat pkg/cache/cache.go)",
+      "Bash(goimports -w internal/service/session_service.go)",
+      "Bash(go run golang.org/x/tools/cmd/goimports@latest -w internal/service/session_service.go)",
+      "Bash(./spider-go.exe)",
+      "Bash(timeout 3 ./spider-go.exe)",
+      "Bash(timeout 2 ./spider-go.exe)"
     ],
     "deny": [],
     "ask": []

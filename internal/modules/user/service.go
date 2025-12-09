@@ -3,7 +3,6 @@ package user
 import (
 	"context"
 	"errors"
-	"spider-go/internal/cache"
 	"spider-go/internal/service"
 	"spider-go/internal/shared"
 	"time"
@@ -38,8 +37,7 @@ type Service interface {
 type userService struct {
 	repo           Repository
 	sessionService service.SessionService
-	captchaService service.CaptchaService
-	captchaCache   cache.CaptchaCache
+	captchaService CaptchaService
 	dauService     service.DAUService
 	jwtSecret      []byte
 	jwtIssuer      string
@@ -50,8 +48,7 @@ type userService struct {
 func NewService(
 	repo Repository,
 	sessionService service.SessionService,
-	captchaService service.CaptchaService,
-	captchaCache cache.CaptchaCache,
+	captchaService CaptchaService,
 	dauService service.DAUService,
 	jwtSecret string,
 	jwtIssuer string,
@@ -60,7 +57,6 @@ func NewService(
 		repo:           repo,
 		sessionService: sessionService,
 		captchaService: captchaService,
-		captchaCache:   captchaCache,
 		dauService:     dauService,
 		jwtSecret:      []byte(jwtSecret),
 		jwtIssuer:      jwtIssuer,

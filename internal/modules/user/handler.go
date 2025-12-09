@@ -9,13 +9,15 @@ import (
 
 // Handler 用户HTTP处理器
 type Handler struct {
-	service Service
+	service        Service
+	captchaService CaptchaService
 }
 
 // NewHandler 创建用户处理器
-func NewHandler(service Service) *Handler {
+func NewHandler(service Service, captchaService CaptchaService) *Handler {
 	return &Handler{
-		service: service,
+		service:        service,
+		captchaService: captchaService,
 	}
 }
 
@@ -29,13 +31,15 @@ func (h *Handler) RegisterRoutes(public *gin.RouterGroup, authenticated *gin.Rou
 		publicUser.POST("/reset-password", h.ResetPassword) // 重置密码
 	}
 
-	// 需要认证的路由
-	authUser := authenticated.Group("/user")
+	// 验证码路由（公开）
+	captcha := public.Group("/captcha")
 	{
-		authUser.GET("/info", h.GetUserInfo)    // 获取用户信息
-		authUser.POST("/bind", h.BindJwc)       // 绑定教务系统
-		authUser.GET("/is-bind", h.CheckIsBind) // 检查绑定状态
+		captcha.POST("/send", h.SendEmailCaptcha) // 发送邮箱验证码
 	}
+
+	authenticated.GET("/info", h.GetUserInfo)    // 获取用户信息
+	authenticated.POST("/bind", h.BindJwc)       // 绑定教务系统
+	authenticated.GET("/is-bind", h.CheckIsBind) // 检查绑定状态
 }
 
 // Register 用户注册
@@ -199,4 +203,27 @@ func (h *Handler) CheckIsBind(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"is_bind": isBind})
+}
+
+// SendEmailCaptcha 发送邮箱验证码
+// @Summary 发送邮箱验证码
+// @Tags Captcha
+// @Accept json
+// @Produce json
+// @Param request body SendEmailCaptchaRequest true "发送验证码请求"
+// @Success 200 {object} gin.H
+// @Router /captcha/send [post]
+func (h *Handler) SendEmailCaptcha(c *gin.Context) {
+	var req SendEmailCaptchaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Error(c, common.CodeInvalidParams, err.Error())
+		return
+	}
+
+	if err := h.captchaService.SendEmailCaptcha(c.Request.Context(), req.Email); err != nil {
+		common.Error(c, common.CodeInternalError, "发送验证码失败")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "验证码已发送"})
 }

@@ -1,10 +1,8 @@
 package api
 
 import (
-	"net/http"
 	"spider-go/internal/app"
 	"spider-go/internal/middleware"
-	"spider-go/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,19 +16,8 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 	api := r.Group("/api")
 	{
 		// ========== 公开接口 ==========
-		// 验证码接口（公开）
-		captchaGroup := api.Group("/captcha")
-		{
-			captchaGroup.POST("/send", sendEmailCaptchaHandler(container.CaptchaService))
-		}
-
-		// 系统配置（公开 - 只读）
-		// TODO: 需要重新实现这些端点以匹配实际的服务接口
-		// configGroup := api.Group("/config")
-		// {
-		// 	configGroup.GET("/term", getCurrentTermHandler(container.ConfigCache))
-		// 	configGroup.GET("/semester-dates", getSemesterDatesHandler(container.ConfigCache))
-		// }
+		// 配置查询（公开）
+		configPublic := api.Group("/config")
 
 		// ========== 用户路由 ==========
 		// 需要认证的用户接口
@@ -48,12 +35,15 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 		// 注册管理员模块路由（包含公开和认证路由）
 		container.AdminModule.RegisterRoutes(api, adminAuth)
 
-		// 管理员专属功能 - 统计和配置
-		// TODO: 需要重新实现这些端点以匹配实际的服务接口
-		// adminAuth.GET("/statistics/dau", getDAUStatisticsHandler(container.DAUService))
-		// adminAuth.GET("/statistics/dau/range", getDAURangeHandler(container.DAUService))
-		// adminAuth.POST("/config/term", setCurrentTermHandler(container.ConfigCache))
-		// adminAuth.POST("/config/semester-dates", setSemesterDatesHandler(container.ConfigCache))
+		// 管理员配置管理
+		adminConfig := adminAuth.Group("/config")
+
+		// 注册配置模块路由（公开+管理员）
+		container.ConfigModule.RegisterRoutes(configPublic, adminConfig)
+
+		// 管理员统计查询
+		adminStats := adminAuth.Group("/statistics")
+		container.StatisticsModule.RegisterRoutes(adminStats)
 
 		// ========== 业务模块路由 ==========
 		// 成绩模块
@@ -69,32 +59,3 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 		container.NoticeModule.RegisterRoutes(api, adminAuth)
 	}
 }
-
-// ========== 验证码处理器 ==========
-
-type sendEmailCaptchaRequest struct {
-	Email string `json:"email" binding:"required,email"`
-}
-
-func sendEmailCaptchaHandler(captchaService service.CaptchaService) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var req sendEmailCaptchaRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
-			return
-		}
-
-		if err := captchaService.SendEmailCaptcha(c.Request.Context(), req.Email); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "发送验证码失败"})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{"message": "验证码已发送"})
-	}
-}
-
-// ========== DAU 统计处理器 ==========
-// TODO: 需要重新实现以匹配实际的服务接口
-
-// ========== 系统配置处理器 ==========
-// TODO: 需要重新实现以匹配实际的服务接口

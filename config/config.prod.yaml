@@ -27,20 +27,20 @@ cors:
 # 生产数据库配置
 database:
   driver: mysql
-  host: 129.204.200.248
+  source: 129.204.200.248
   port: 3306
   user: spider-go_prod
   pass: your_production_password_here
   name: spider-go_prod
 
-# 生产 Redis 配置
+# 生产 Redis 配置（统一使用同一个 Redis 实例，不同 DB 隔离数据）
 redis:
-  # 会话缓存数据库
+  # 会话缓存数据库（DB 0: 会话、DAU、配置、用户数据缓存）
   session:
     host: 129.204.200.248:6379
     pass: your_redis_password_here
     db: 0
-  # 验证码数据库
+  # 验证码数据库（DB 1: 验证码，独立隔离避免误删）
   captcha:
     host: 129.204.200.248:6379
     pass: your_redis_password_here

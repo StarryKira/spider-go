@@ -27,13 +27,10 @@ func (h *Handler) RegisterRoutes(public *gin.RouterGroup, authenticated *gin.Rou
 		publicAdmin.POST("/login", h.Login) // 管理员登录
 	}
 
-	// 需要认证的路由
-	authAdmin := authenticated.Group("/admin")
-	{
-		authAdmin.GET("/info", h.GetInfo)                    // 获取管理员信息
-		authAdmin.POST("/reset", h.ChangePassword)           // 修改密码
-		authAdmin.POST("/broadcast-email", h.BroadcastEmail) // 群发邮件
-	}
+	// 需要认证的路由（authenticated 已经是 /api/admin 了，不需要再加 /admin）
+	authenticated.GET("/info", h.GetInfo)                    // 获取管理员信息
+	authenticated.POST("/reset", h.ChangePassword)           // 修改密码
+	authenticated.POST("/broadcast-email", h.BroadcastEmail) // 群发邮件
 }
 
 // Login 管理员登录
