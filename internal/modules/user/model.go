@@ -46,6 +46,11 @@ type ResetPasswordRequest struct {
 	Captcha  string `json:"captcha" binding:"required"`
 }
 
+// SendEmailCaptchaRequest 发送邮箱验证码请求
+type SendEmailCaptchaRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
 // UserResponse 用户响应（不包含敏感信息）
 type UserResponse struct {
 	Uid       int       `json:"uid"`

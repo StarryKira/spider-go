@@ -15,7 +15,6 @@ type Config struct {
 	Jwc      JwcConfig          `yaml:"jwc" mapstructure:"jwc"`
 	JWT      JWTConfig          `yaml:"jwt" mapstructure:"jwt"`
 	Email    EmailConfig        `yaml:"email" mapstructure:"email"`
-	Ocr      DdddOCRConfig      `yaml:"ocr" mapstructure:"ocr"`
 }
 
 type Appconfig struct {
@@ -95,11 +94,6 @@ type RedisConfig struct {
 type RedisClusterConfig struct {
 	Session RedisConfig `yaml:"session" mapstructure:"session"` // DB 0: 用户会话缓存
 	Captcha RedisConfig `yaml:"captcha" mapstructure:"captcha"` // DB 1: 验证码存储
-}
-
-// DdddOCRConfig OCR 服务配置
-type DdddOCRConfig struct {
-	Host string `yaml:"host" mapstructure:"host"` // OCR 服务地址
 }
 
 var Conf *Config

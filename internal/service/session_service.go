@@ -11,7 +11,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -42,7 +41,6 @@ type jwcSessionService struct {
 	loginURL        string
 	redirectURL     string
 	captchaURL      string
-	ocrURL          string
 	captchaImageURL string
 	timeout         time.Duration
 	cacheExpire     time.Duration
@@ -57,7 +55,6 @@ func NewJwcSessionService(
 	redirectURL string,
 	captchaURL string,
 	captchaImageURL string,
-	ocrURL string,
 ) SessionService {
 	return &jwcSessionService{
 		sessionCache:    sessionCache,
@@ -67,7 +64,6 @@ func NewJwcSessionService(
 		redirectURL:     redirectURL,
 		captchaURL:      captchaURL,
 		captchaImageURL: captchaImageURL,
-		ocrURL:          ocrURL,
 		timeout:         30 * time.Second,
 		cacheExpire:     time.Hour,
 	}
@@ -255,25 +251,6 @@ func (s *jwcSessionService) GetCachedCookies(ctx context.Context, uid int) ([]*h
 // InvalidateSession 清除会话缓存
 func (s *jwcSessionService) InvalidateSession(ctx context.Context, uid int) error {
 	return s.sessionCache.DeleteCookies(ctx, uid)
-}
-
-func (s *jwcSessionService) HandleCaptcha(picBase64 string) (string, error) {
-	data := url.Values{}
-	data.Set("image", picBase64)
-	data.Set("probability", "false")
-	data.Set("png_fix", "false")
-
-	resp, err := http.PostForm(s.ocrURL, data)
-	if err != nil {
-		return "", common.NewAppError(common.CodeInternalError, err.Error())
-	}
-
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-	return string(body), nil
 }
 
 // encryptPassword 使用 RSA 公钥加密密码

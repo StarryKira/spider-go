@@ -10,27 +10,30 @@ import (
 
 // Module 用户模块
 type Module struct {
-	handler *Handler
-	service Service
+	handler        *Handler
+	service        Service
+	captchaService CaptchaService
 }
 
 // NewModule 创建用户模块
 func NewModule(
 	db *gorm.DB,
 	sessionService service.SessionService,
-	captchaService service.CaptchaService,
 	captchaCache cache.CaptchaCache,
+	emailService service.EmailService,
 	dauService service.DAUService,
 	jwtSecret string,
 	jwtIssuer string,
 ) *Module {
 	repo := NewRepository(db)
-	svc := NewService(repo, sessionService, captchaService, captchaCache, dauService, jwtSecret, jwtIssuer)
-	handler := NewHandler(svc)
+	captchaService := NewCaptchaService(captchaCache, emailService)
+	svc := NewService(repo, sessionService, captchaService, dauService, jwtSecret, jwtIssuer)
+	handler := NewHandler(svc, captchaService)
 
 	return &Module{
-		handler: handler,
-		service: svc,
+		handler:        handler,
+		service:        svc,
+		captchaService: captchaService,
 	}
 }
 

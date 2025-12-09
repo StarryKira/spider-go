@@ -7,15 +7,16 @@ import (
 	"spider-go/internal/cache"
 	"spider-go/internal/middleware"
 	"spider-go/internal/modules/admin"
+	"spider-go/internal/modules/config"
 	"spider-go/internal/modules/course"
 	"spider-go/internal/modules/exam"
 	"spider-go/internal/modules/grade"
 	"spider-go/internal/modules/notice"
+	"spider-go/internal/modules/statistics"
 	"spider-go/internal/modules/user"
 	"spider-go/internal/service"
 	"spider-go/internal/shared"
-	"strconv"
-	"strings"
+	pkgredis "spider-go/pkg/redis"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -49,17 +50,17 @@ type Container struct {
 	SessionService service.SessionService
 	CrawlerService service.CrawlerService
 	EmailService   service.EmailService
-	CaptchaService service.CaptchaService
 	DAUService     service.DAUService
-	TaskService    service.TaskService
 
 	// Modules (new architecture)
-	UserModule   *user.Module
-	AdminModule  *admin.Module
-	GradeModule  *grade.Module
-	CourseModule *course.Module
-	ExamModule   *exam.Module
-	NoticeModule *notice.Module
+	UserModule       *user.Module
+	AdminModule      *admin.Module
+	GradeModule      *grade.Module
+	CourseModule     *course.Module
+	ExamModule       *exam.Module
+	NoticeModule     *notice.Module
+	ConfigModule     *config.Module
+	StatisticsModule *statistics.Module
 }
 
 // NewContainer 创建依赖注入容器
@@ -131,15 +132,10 @@ func (c *Container) initDB() error {
 
 // initRedis 初始化 Redis（同一个 Redis 服务器的不同数据库）
 func (c *Container) initRedis() error {
-	ctx := context.Background()
-
 	// 初始化会话 Redis (DB 0) - 用于存储用户登录会话
 	sessionClient, err := c.createRedisClient(c.Config.Redis.Session)
 	if err != nil {
 		return fmt.Errorf("初始化会话Redis失败: %w", err)
-	}
-	if err := sessionClient.Ping(ctx).Err(); err != nil {
-		return fmt.Errorf("会话Redis连接测试失败: %w", err)
 	}
 	c.SessionRedis = sessionClient
 
@@ -148,29 +144,20 @@ func (c *Container) initRedis() error {
 	if err != nil {
 		return fmt.Errorf("初始化验证码Redis失败: %w", err)
 	}
-	if err := captchaClient.Ping(ctx).Err(); err != nil {
-		return fmt.Errorf("验证码Redis连接测试失败: %w", err)
-	}
 	c.CaptchaRedis = captchaClient
 
 	return nil
 }
 
-// createRedisClient 创建 Redis 客户端（辅助函数）
+// createRedisClient 创建 Redis 客户端（使用 pkg/redis）
 func (c *Container) createRedisClient(config RedisConfig) (*redis.Client, error) {
-	// 如果 Host 已经包含端口，直接使用；否则添加端口
-	addr := config.Host
-	if config.Port != 0 && !strings.Contains(addr, ":") {
-		addr = addr + ":" + strconv.Itoa(config.Port)
+	pkgRedisConfig := pkgredis.Config{
+		Host: config.Host,
+		Port: config.Port,
+		Pass: config.Pass,
+		DB:   config.DB,
 	}
-
-	client := redis.NewClient(&redis.Options{
-		Addr:     addr,
-		Password: config.Pass,
-		DB:       config.DB,
-	})
-
-	return client, nil
+	return pkgredis.NewClient(pkgRedisConfig)
 }
 
 // initSharedServices 初始化共享服务
@@ -210,7 +197,6 @@ func (c *Container) initServices() {
 		currentMode.RedirectURL,
 		c.Config.Jwc.CaptchaURL,
 		c.Config.Jwc.CaptchaImageURL,
-		c.Config.Ocr.Host,
 	)
 
 	// Crawler Service
@@ -225,23 +211,8 @@ func (c *Container) initServices() {
 		c.Config.Email.FromName,
 	)
 
-	// Captcha Service（验证码服务）
-	c.CaptchaService = service.NewCaptchaService(
-		c.CaptchaCache,
-		c.EmailService,
-	)
-
 	// DAU Service（日活统计服务）
 	c.DAUService = service.NewDAUService(c.DAUCache)
-
-	// Task Service（定时任务服务）
-	// TODO: 需要重构以适应新的模块架构
-	c.TaskService = service.NewTaskService(
-		c.DAUCache,
-		c.SessionService,
-		c.UserDataCache,
-		c.ConfigCache,
-	)
 }
 
 // initMiddlewares 初始化中间件
@@ -266,8 +237,8 @@ func (c *Container) initModules() {
 	c.UserModule = user.NewModule(
 		c.DB,
 		c.SessionService,
-		c.CaptchaService,
 		c.CaptchaCache,
+		c.EmailService,
 		c.DAUService,
 		c.Config.JWT.Secret,
 		c.Config.JWT.Issuer,
@@ -312,6 +283,12 @@ func (c *Container) initModules() {
 
 	// Notice Module（通知模块）
 	c.NoticeModule = notice.NewModule(c.DB)
+
+	// Config Module（配置模块）
+	c.ConfigModule = config.NewModule(c.ConfigCache)
+
+	// Statistics Module（统计模块）
+	c.StatisticsModule = statistics.NewModule(c.DAUService)
 }
 
 // initRSAPublicKey 初始化 RSA 公钥

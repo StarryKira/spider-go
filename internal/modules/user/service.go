@@ -3,7 +3,7 @@ package user
 import (
 	"context"
 	"errors"
-	"spider-go/internal/cache"
+	"regexp"
 	"spider-go/internal/service"
 	"spider-go/internal/shared"
 	"time"
@@ -22,15 +22,15 @@ var (
 // Service 用户服务接口
 type Service interface {
 	// 认证相关
-	Register(ctx context.Context, req *RegisterRequest) error
-	Login(ctx context.Context, req *LoginRequest) (*LoginResponse, error)
-	ResetPassword(ctx context.Context, req *ResetPasswordRequest) error
+	Register(ctx context.Context, email, password, name, captcha string) (token string, err error)
+	Login(ctx context.Context, email, password string) (token string, user *User, err error)
+	ResetPassword(ctx context.Context, email, newPassword, captcha string) error
 
 	// 用户信息
-	GetUserInfo(ctx context.Context, uid int) (*UserResponse, error)
+	GetUserInfo(ctx context.Context, uid int) (*User, error)
 
 	// 教务系统绑定
-	BindJwc(ctx context.Context, uid int, req *BindJwcRequest) error
+	BindJwc(ctx context.Context, uid int, sid, spwd string) error
 	CheckIsBind(ctx context.Context, uid int) (bool, error)
 }
 
@@ -38,8 +38,7 @@ type Service interface {
 type userService struct {
 	repo           Repository
 	sessionService service.SessionService
-	captchaService service.CaptchaService
-	captchaCache   cache.CaptchaCache
+	captchaService CaptchaService
 	dauService     service.DAUService
 	jwtSecret      []byte
 	jwtIssuer      string
@@ -50,8 +49,7 @@ type userService struct {
 func NewService(
 	repo Repository,
 	sessionService service.SessionService,
-	captchaService service.CaptchaService,
-	captchaCache cache.CaptchaCache,
+	captchaService CaptchaService,
 	dauService service.DAUService,
 	jwtSecret string,
 	jwtIssuer string,
@@ -60,7 +58,6 @@ func NewService(
 		repo:           repo,
 		sessionService: sessionService,
 		captchaService: captchaService,
-		captchaCache:   captchaCache,
 		dauService:     dauService,
 		jwtSecret:      []byte(jwtSecret),
 		jwtIssuer:      jwtIssuer,
@@ -69,49 +66,70 @@ func NewService(
 }
 
 // Register 用户注册
-func (s *userService) Register(ctx context.Context, req *RegisterRequest) error {
+func (s *userService) Register(ctx context.Context, email, password, name, captcha string) (string, error) {
 	// 检查用户是否已存在
-	existing, err := s.repo.FindByEmail(ctx, req.Email)
+	existing, err := s.repo.FindByEmail(ctx, email)
 	if err != nil && !errors.Is(err, ErrUserNotFound) {
-		return err
+		return "", err
 	}
 	if existing != nil {
-		return ErrEmailAlreadyExists
+		return "", ErrEmailAlreadyExists
 	}
 
 	// 验证验证码
-	if err := s.captchaService.VerifyEmailCaptcha(ctx, req.Email, req.Captcha); err != nil {
-		return ErrInvalidCaptcha
+	if err := s.captchaService.VerifyEmailCaptcha(ctx, email, captcha); err != nil {
+		return "", ErrInvalidCaptcha
 	}
 
 	// 加密密码
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// 创建用户
 	user := &User{
-		Name:      req.Name,
-		Email:     req.Email,
+		Name:      name,
+		Email:     email,
 		Password:  string(hashedPassword),
 		CreatedAt: time.Now(),
 	}
 
-	return s.repo.Create(ctx, user)
+	if err := s.repo.Create(ctx, user); err != nil {
+		return "", err
+	}
+
+	// 生成JWT token
+	claims := shared.UserClaims{
+		Uid:  user.Uid,
+		Name: user.Name,
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.jwtExpire)),
+			Issuer:    s.jwtIssuer,
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(s.jwtSecret)
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
 }
 
 // Login 用户登录
-func (s *userService) Login(ctx context.Context, req *LoginRequest) (*LoginResponse, error) {
+func (s *userService) Login(ctx context.Context, email, password string) (string, *User, error) {
 	// 查找用户
-	user, err := s.repo.FindByEmail(ctx, req.Email)
+	user, err := s.repo.FindByEmail(ctx, email)
 	if err != nil {
-		return nil, ErrInvalidCredentials
+		return "", nil, ErrInvalidCredentials
 	}
 
 	// 验证密码
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return nil, ErrInvalidCredentials
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return "", nil, ErrInvalidCredentials
 	}
 
 	// 记录DAU
@@ -131,30 +149,27 @@ func (s *userService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(s.jwtSecret)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
-	return &LoginResponse{
-		Token: tokenString,
-		User:  user.ToResponse(),
-	}, nil
+	return tokenString, user, nil
 }
 
 // ResetPassword 重置密码
-func (s *userService) ResetPassword(ctx context.Context, req *ResetPasswordRequest) error {
+func (s *userService) ResetPassword(ctx context.Context, email, newPassword, captcha string) error {
 	// 查找用户
-	user, err := s.repo.FindByEmail(ctx, req.Email)
+	user, err := s.repo.FindByEmail(ctx, email)
 	if err != nil {
 		return ErrUserNotFound
 	}
 
 	// 验证验证码
-	if err := s.captchaService.VerifyEmailCaptcha(ctx, req.Email, req.Captcha); err != nil {
+	if err := s.captchaService.VerifyEmailCaptcha(ctx, email, captcha); err != nil {
 		return ErrInvalidCaptcha
 	}
 
 	// 加密新密码
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
@@ -164,28 +179,36 @@ func (s *userService) ResetPassword(ctx context.Context, req *ResetPasswordReque
 }
 
 // GetUserInfo 获取用户信息
-func (s *userService) GetUserInfo(ctx context.Context, uid int) (*UserResponse, error) {
+func (s *userService) GetUserInfo(ctx context.Context, uid int) (*User, error) {
 	user, err := s.repo.FindByID(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
 
-	return user.ToResponse(), nil
+	return user, nil
 }
 
 // BindJwc 绑定教务系统
-func (s *userService) BindJwc(ctx context.Context, uid int, req *BindJwcRequest) error {
-	if req.Sid == "" || req.Spwd == "" {
+func (s *userService) BindJwc(ctx context.Context, uid int, sid, spwd string) error {
+	if sid == "" || spwd == "" {
 		return ErrEmptyParams
+	}
+	//判断教务系统密码含有大小写字符，数字，特殊符号
+	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(spwd)
+	hasLower := regexp.MustCompile(`[a-z]`).MatchString(spwd)
+	hasDigit := regexp.MustCompile(`\d`).MatchString(spwd)
+	hasSymbol := regexp.MustCompile(`[^A-Za-z0-9]`).MatchString(spwd)
+	if !(hasUpper && hasLower && hasDigit && hasSymbol) {
+		return errors.New("请绑定i中南林APP账号")
 	}
 
 	// 尝试登录教务系统验证账号
-	if err := s.sessionService.LoginAndCache(ctx, uid, req.Sid, req.Spwd); err != nil {
+	if err := s.sessionService.LoginAndCache(ctx, uid, sid, spwd); err != nil {
 		return errors.New("请绑定i中南林APP账号")
 	}
 
 	// 更新数据库
-	if err := s.repo.UpdateJwc(ctx, uid, req.Sid, req.Spwd); err != nil {
+	if err := s.repo.UpdateJwc(ctx, uid, sid, spwd); err != nil {
 		return err
 	}
 

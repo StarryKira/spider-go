@@ -19,13 +19,13 @@ var (
 // Service 管理员服务接口
 type Service interface {
 	// 认证相关
-	Login(ctx context.Context, req *LoginRequest) (*LoginResponse, error)
-	GetAdminInfo(ctx context.Context, uid int) (*AdminResponse, error)
-	ChangePassword(ctx context.Context, uid int, req *ChangePwdRequest) error
+	Login(ctx context.Context, email, password string) (token string, admin *Admin, err error)
+	GetAdminInfo(ctx context.Context, uid int) (*Admin, error)
+	ChangePassword(ctx context.Context, uid int, oldPassword, newPassword string) error
 
 	// 系统管理
 	InitDefaultAdmin(ctx context.Context) error
-	BroadcastEmail(ctx context.Context, req *BroadcastEmailRequest) (*BroadcastEmailResponse, error)
+	BroadcastEmail(ctx context.Context, subject, content string) (successCount, failCount, totalCount int, err error)
 }
 
 // adminService 管理员服务实现
@@ -57,16 +57,16 @@ func NewService(
 }
 
 // Login 管理员登录
-func (s *adminService) Login(ctx context.Context, req *LoginRequest) (*LoginResponse, error) {
+func (s *adminService) Login(ctx context.Context, email, password string) (string, *Admin, error) {
 	// 查找管理员
-	admin, err := s.repo.FindByEmail(ctx, req.Email)
+	admin, err := s.repo.FindByEmail(ctx, email)
 	if err != nil {
-		return nil, ErrInvalidCredentials
+		return "", nil, ErrInvalidCredentials
 	}
 
 	// 验证密码
-	if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(req.Password)); err != nil {
-		return nil, ErrInvalidCredentials
+	if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(password)); err != nil {
+		return "", nil, ErrInvalidCredentials
 	}
 
 	// 生成JWT token
@@ -84,27 +84,24 @@ func (s *adminService) Login(ctx context.Context, req *LoginRequest) (*LoginResp
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(s.jwtSecret)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
-	return &LoginResponse{
-		Token: tokenString,
-		Admin: admin.ToResponse(),
-	}, nil
+	return tokenString, admin, nil
 }
 
 // GetAdminInfo 获取管理员信息
-func (s *adminService) GetAdminInfo(ctx context.Context, uid int) (*AdminResponse, error) {
+func (s *adminService) GetAdminInfo(ctx context.Context, uid int) (*Admin, error) {
 	admin, err := s.repo.FindByID(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
 
-	return admin.ToResponse(), nil
+	return admin, nil
 }
 
 // ChangePassword 修改密码
-func (s *adminService) ChangePassword(ctx context.Context, uid int, req *ChangePwdRequest) error {
+func (s *adminService) ChangePassword(ctx context.Context, uid int, oldPassword, newPassword string) error {
 	// 查找管理员
 	admin, err := s.repo.FindByID(ctx, uid)
 	if err != nil {
@@ -112,12 +109,12 @@ func (s *adminService) ChangePassword(ctx context.Context, uid int, req *ChangeP
 	}
 
 	// 验证原密码
-	if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(req.OldPassword)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(oldPassword)); err != nil {
 		return ErrInvalidPassword
 	}
 
 	// 加密新密码
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
@@ -155,15 +152,15 @@ func (s *adminService) InitDefaultAdmin(ctx context.Context) error {
 }
 
 // BroadcastEmail 群发邮件给所有用户
-func (s *adminService) BroadcastEmail(ctx context.Context, req *BroadcastEmailRequest) (*BroadcastEmailResponse, error) {
+func (s *adminService) BroadcastEmail(ctx context.Context, subject, content string) (int, int, int, error) {
 	// 获取所有用户的邮箱
 	emails, err := s.userQuery.GetAllUserEmails(ctx)
 	if err != nil {
-		return nil, errors.New("获取用户邮箱列表失败")
+		return 0, 0, 0, errors.New("获取用户邮箱列表失败")
 	}
 
 	if len(emails) == 0 {
-		return nil, errors.New("没有用户可以发送邮件")
+		return 0, 0, 0, errors.New("没有用户可以发送邮件")
 	}
 
 	// 群发邮件
@@ -171,7 +168,7 @@ func (s *adminService) BroadcastEmail(ctx context.Context, req *BroadcastEmailRe
 	failCount := 0
 
 	for _, email := range emails {
-		err := s.emailService.SendEmail(ctx, email, req.Subject, req.Content)
+		err := s.emailService.SendEmail(ctx, email, subject, content)
 		if err != nil {
 			failCount++
 		} else {
@@ -179,9 +176,5 @@ func (s *adminService) BroadcastEmail(ctx context.Context, req *BroadcastEmailRe
 		}
 	}
 
-	return &BroadcastEmailResponse{
-		SuccessCount: successCount,
-		FailCount:    failCount,
-		TotalCount:   len(emails),
-	}, nil
+	return successCount, failCount, len(emails), nil
 }

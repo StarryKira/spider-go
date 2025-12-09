@@ -1,4 +1,4 @@
-package service
+package user
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"spider-go/internal/cache"
 	"spider-go/internal/common"
+	"spider-go/internal/service"
 	"time"
 )
 
@@ -18,22 +19,22 @@ type CaptchaService interface {
 	VerifyEmailCaptcha(ctx context.Context, email string, code string) error
 }
 
-// captchaServiceImpl 验证码服务实现
-type captchaServiceImpl struct {
+// captchaService 验证码服务实现
+type captchaService struct {
 	captchaCache cache.CaptchaCache
-	emailService EmailService
+	emailService service.EmailService
 }
 
 // NewCaptchaService 创建验证码服务
-func NewCaptchaService(captchaCache cache.CaptchaCache, emailService EmailService) CaptchaService {
-	return &captchaServiceImpl{
+func NewCaptchaService(captchaCache cache.CaptchaCache, emailService service.EmailService) CaptchaService {
+	return &captchaService{
 		captchaCache: captchaCache,
 		emailService: emailService,
 	}
 }
 
 // SendEmailCaptcha 发送邮箱验证码
-func (s *captchaServiceImpl) SendEmailCaptcha(ctx context.Context, email string) error {
+func (s *captchaService) SendEmailCaptcha(ctx context.Context, email string) error {
 	// 1. 生成 6 位数字验证码
 	code := s.generateCode(6)
 
@@ -53,7 +54,7 @@ func (s *captchaServiceImpl) SendEmailCaptcha(ctx context.Context, email string)
 }
 
 // VerifyEmailCaptcha 验证邮箱验证码
-func (s *captchaServiceImpl) VerifyEmailCaptcha(ctx context.Context, email string, code string) error {
+func (s *captchaService) VerifyEmailCaptcha(ctx context.Context, email string, code string) error {
 	// 使用原子操作验证并删除验证码
 	valid, err := s.captchaCache.VerifyAndDelete(ctx, email, code)
 	if err != nil {
@@ -68,7 +69,7 @@ func (s *captchaServiceImpl) VerifyEmailCaptcha(ctx context.Context, email strin
 }
 
 // generateCode 生成指定位数的数字验证码
-func (s *captchaServiceImpl) generateCode(length int) string {
+func (s *captchaService) generateCode(length int) string {
 	rand.Seed(time.Now().UnixNano())
 	code := ""
 	for i := 0; i < length; i++ {

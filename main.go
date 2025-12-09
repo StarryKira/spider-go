@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"spider-go/internal/api"
 	"spider-go/internal/app"
+	"spider-go/internal/scheduler"
+	"spider-go/internal/scheduler/tasks"
 	"strconv"
 	"syscall"
 
@@ -39,7 +41,7 @@ func main() {
 	log.Printf("运行环境: %s", container.Config.App.Env)
 
 	// 2. 启动定时任务调度器
-	scheduler := app.NewScheduler(container.TaskService, container.RSAKeyService)
+	scheduler := initScheduler(container)
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -72,4 +74,17 @@ func main() {
 	<-quit
 
 	fmt.Println("\n正在关闭服务器...")
+}
+
+// initScheduler 初始化定时任务调度器
+func initScheduler(container *app.Container) *scheduler.Scheduler {
+	s := scheduler.NewScheduler()
+
+	// 添加 RSA 公钥刷新任务
+	s.AddTask(tasks.NewRSARefreshTask(container.RSAKeyService))
+
+	// 添加数据预热任务（暂时禁用）
+	s.AddTask(tasks.NewDataPrewarmTask())
+
+	return s
 }

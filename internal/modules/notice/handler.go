@@ -115,7 +115,7 @@ func (h *Handler) CreateNotice(c *gin.Context) {
 		return
 	}
 
-	notice, err := h.service.Create(c.Request.Context(), &req)
+	notice, err := h.service.Create(c.Request.Context(), req.Content, req.NoticeType, req.IsShow, req.IsTop, req.IsHtml)
 	if err != nil {
 		if err == ErrEmptyContent {
 			common.Error(c, common.CodeInvalidParams, err.Error())
@@ -150,7 +150,7 @@ func (h *Handler) UpdateNotice(c *gin.Context) {
 		return
 	}
 
-	notice, err := h.service.Update(c.Request.Context(), nid, &req)
+	notice, err := h.service.Update(c.Request.Context(), nid, req.Content, req.NoticeType, req.IsShow, req.IsTop, req.IsHtml)
 	if err != nil {
 		if err == ErrNoticeNotFound {
 			common.Error(c, common.CodeNotFound, "通知不存在")
