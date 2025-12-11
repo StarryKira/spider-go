@@ -23,7 +23,7 @@ const (
 	CodeCacheError        = pkgerrors.CodeCacheError
 )
 
-// 重新导出 pkg/errors 的类型（保持向后兼容）
+// AppError 重新导出 pkg/errors 的类型（保持向后兼容）
 type AppError = pkgerrors.AppError
 
 // NewAppError 重新导出（保持向后兼容）
