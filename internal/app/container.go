@@ -39,11 +39,12 @@ type Container struct {
 	UserQuery shared.UserQuery
 
 	// Caches
-	SessionCache  cache.SessionCache
-	CaptchaCache  cache.CaptchaCache
-	DAUCache      cache.DAUCache
-	ConfigCache   cache.ConfigCache
-	UserDataCache cache.UserDataCache
+	SessionCache    cache.SessionCache
+	CaptchaCache    cache.CaptchaCache
+	DAUCache        cache.DAUCache
+	ConfigCache     cache.ConfigCache
+	UserDataCache   cache.UserDataCache
+	EvaluationCache cache.EvaluationCache
 
 	// Services (infrastructure services only)
 	RSAKeyService  service.RSAKeyService
@@ -177,6 +178,8 @@ func (c *Container) initCaches() {
 	c.ConfigCache = cache.NewRedisConfigCache(c.SessionRedis)
 	// 用户数据缓存（DB 0，与会话共用）
 	c.UserDataCache = cache.NewRedisUserDataCache(c.SessionRedis)
+	// 教评缓存 DB0
+	c.EvaluationCache = cache.NewEvaluationCache(c.SessionRedis)
 }
 
 // initServices 初始化 Services（仅基础设施服务）

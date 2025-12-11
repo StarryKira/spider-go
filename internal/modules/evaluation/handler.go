@@ -15,8 +15,10 @@ func NewHandler(service Service) *Handler {
 
 // RegisterRoutes 注册路由
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
-	exams := r.Group("/exams")
-	{
-		exams.GET("", h.GetExams) // 获取考试安排
-	}
+	evaluation := r.Group("/evaluation")
+	evaluation.GET("/info",h.)
+}
+
+func (h *Handler) GetEvaluationInfo(c *gin.Context) {
+
 }
