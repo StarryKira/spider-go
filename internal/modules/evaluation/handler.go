@@ -16,9 +16,10 @@ func NewHandler(service Service) *Handler {
 // RegisterRoutes 注册路由
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 	evaluation := r.Group("/evaluation")
-	evaluation.GET("/info",h.)
+	evaluation.GET("/info", h.GetEvaluationInfo)
 }
 
 func (h *Handler) GetEvaluationInfo(c *gin.Context) {
+	uid := c.Param("uid")
 
 }

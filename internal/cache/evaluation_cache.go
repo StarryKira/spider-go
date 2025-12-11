@@ -26,7 +26,7 @@ type RedisEvaluationCache struct {
 }
 
 func NewEvaluationCache(client *redis.Client) EvaluationCache {
-	return RedisEvaluationCache{
+	return &RedisEvaluationCache{
 		client: client,
 	}
 }
