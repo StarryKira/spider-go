@@ -18,21 +18,19 @@ type Module struct {
 func NewModule(
 	userQuery shared.UserQuery,
 	sessionService service.SessionService,
-	crawlerService service.CrawlerService,
 	evaluationCache cache.EvaluationCache,
 	evaluationInfoURL string,
-	loginURL string,
-	redirectURL string,
+	casRedirectURL string,
+	doLoginURL string,
 ) *Module {
 	// 初始化服务
 	svc := NewService(
 		userQuery,
 		sessionService,
-		crawlerService,
 		evaluationCache,
 		evaluationInfoURL,
-		loginURL,
-		redirectURL,
+		casRedirectURL,
+		doLoginURL,
 	)
 
 	// 初始化处理器

@@ -53,6 +53,7 @@ type JwcModeConfig struct {
 	// 教评系统配置
 	EvaluationRedirectURL string `yaml:"evaluation_redirect_url" mapstructure:"evaluation_redirect_url"`
 	EvaluationInfoURL     string `yaml:"evaluation_info_url" mapstructure:"evaluation_info_url"`
+	EvaluationDoLoginURL  string `yaml:"evaluation_do_login_url" mapstructure:"evaluation_do_login_url"`
 }
 
 // GetCurrentModeConfig 获取当前模式的配置

@@ -290,11 +290,10 @@ func (c *Container) initModules() {
 	c.EvaluationModule = evaluation.NewModule(
 		c.UserQuery,
 		c.SessionService,
-		c.CrawlerService,
 		c.EvaluationCache,
 		currentMode.EvaluationInfoURL,
-		currentMode.LoginURL,
 		currentMode.EvaluationRedirectURL,
+		currentMode.EvaluationDoLoginURL,
 	)
 
 	// Notice Module（通知模块）

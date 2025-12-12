@@ -41,6 +41,8 @@ type SessionService interface {
 	InvalidateSession(ctx context.Context, uid int) error
 	// LoginAndCacheWithConfig 通用登录方法，支持自定义 URL 和缓存
 	LoginAndCacheWithConfig(ctx context.Context, uid int, username, password string, loginURL, redirectURL string, cookieCache CookieCache) error
+	// LoginAndGetClient 登录 CAS 并返回带 TGC cookie 的 client，供其他系统复用
+	LoginAndGetClient(ctx context.Context, username, password string) (*http.Client, error)
 }
 
 // jwcSessionService 教务系统会话服务实现
@@ -353,4 +355,94 @@ func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int
 
 func (s *jwcSessionService) loginAndCacheOnceByWebVPN(ctx context.Context, uid int, username, password string) error {
 	return s.LoginAndCacheWithConfig(ctx, uid, username, password, s.loginURL, s.redirectURL, s.sessionCache)
+}
+
+// LoginAndGetClient 登录 CAS 并返回带 TGC cookie 的 client
+func (s *jwcSessionService) LoginAndGetClient(ctx context.Context, username, password string) (*http.Client, error) {
+	// 创建 cookie jar
+	jar, err := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
+	if err != nil {
+		return nil, common.NewAppError(common.CodeJwcLoginFailed, "创建会话失败")
+	}
+
+	client := &http.Client{
+		Jar:     jar,
+		Timeout: s.timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // 禁止自动跳转
+		},
+	}
+
+	// 请求登录页获取 execution
+	res, err := client.Get(s.loginURL)
+	if err != nil {
+		return nil, common.NewAppError(common.CodeJwcLoginFailed, "连接系统失败")
+	}
+	defer res.Body.Close()
+
+	// 如果已经 302，说明有 TGC，直接返回
+	if res.StatusCode == 302 {
+		return client, nil
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return nil, common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("响应异常: %d", res.StatusCode))
+	}
+
+	doc, err := goquery.NewDocumentFromReader(res.Body)
+	if err != nil {
+		return nil, common.NewAppError(common.CodeJwcParseFailed, "解析登录页面失败")
+	}
+
+	execution := doc.Find("input[name='execution']").AttrOr("value", "")
+	if execution == "" {
+		return nil, common.NewAppError(common.CodeJwcLoginFailed, "找不到 execution")
+	}
+
+	// 密码加密
+	encryptedPwd, err := s.encryptPassword(password)
+	if err != nil {
+		return nil, common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("密码加密失败: %v", err))
+	}
+
+	fpVisitorId, err := s.GenerateRandomFingerPrintHash()
+	if err != nil {
+		return nil, common.NewAppError(common.CodeInternalError, "生成设备指纹失败")
+	}
+
+	form := url.Values{
+		"username":    {username},
+		"password":    {encryptedPwd},
+		"execution":   {execution},
+		"fpVisitorId": {fpVisitorId},
+		"rememberMe":  {"on"},
+		"_eventId":    {"submit"},
+		"failN":       {"0"},
+		"submit1":     {"login1"},
+	}
+
+	// 构造 POST 请求
+	req, err := http.NewRequest("POST", s.loginURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, common.NewAppError(common.CodeJwcLoginFailed, "构造登录请求失败")
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Referer", s.loginURL)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, common.NewAppError(common.CodeJwcLoginFailed, "登录失败")
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != 302 {
+		return nil, common.NewAppError(common.CodeJwcLoginFailed, "CAS 登录失败，未收到重定向")
+	}
+
+	// TGC cookie 已在 jar 中，返回 client
+	return client, nil
 }
