@@ -9,6 +9,7 @@ import (
 	"spider-go/internal/modules/admin"
 	"spider-go/internal/modules/config"
 	"spider-go/internal/modules/course"
+	"spider-go/internal/modules/evaluation"
 	"spider-go/internal/modules/exam"
 	"spider-go/internal/modules/grade"
 	"spider-go/internal/modules/notice"
@@ -59,6 +60,7 @@ type Container struct {
 	GradeModule      *grade.Module
 	CourseModule     *course.Module
 	ExamModule       *exam.Module
+	EvaluationModule *evaluation.Module
 	NoticeModule     *notice.Module
 	ConfigModule     *config.Module
 	StatisticsModule *statistics.Module
@@ -282,6 +284,17 @@ func (c *Container) initModules() {
 		c.CrawlerService,
 		c.UserDataCache,
 		currentMode.ExamURL,
+	)
+
+	// Evaluation Module（教评模块）
+	c.EvaluationModule = evaluation.NewModule(
+		c.UserQuery,
+		c.SessionService,
+		c.CrawlerService,
+		c.EvaluationCache,
+		currentMode.EvaluationInfoURL,
+		currentMode.LoginURL,
+		currentMode.EvaluationRedirectURL,
 	)
 
 	// Notice Module（通知模块）

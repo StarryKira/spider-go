@@ -23,6 +23,14 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
+// CookieCache 通用的 Cookie 缓存接口，用于统一 SessionCache 和 EvaluationCache
+type CookieCache interface {
+	GetCookies(ctx context.Context, uid int) ([]*http.Cookie, error)
+	SetCookies(ctx context.Context, uid int, cookies []*http.Cookie, expiration time.Duration) error
+	DeleteCookies(ctx context.Context, uid int) error
+	HasCookies(ctx context.Context, uid int) (bool, error)
+}
+
 // SessionService 会话服务接口
 type SessionService interface {
 	// LoginAndCache 登录教务系统并缓存会话
@@ -31,6 +39,8 @@ type SessionService interface {
 	GetCachedCookies(ctx context.Context, uid int) ([]*http.Cookie, error)
 	// InvalidateSession 清除会话缓存
 	InvalidateSession(ctx context.Context, uid int) error
+	// LoginAndCacheWithConfig 通用登录方法，支持自定义 URL 和缓存
+	LoginAndCacheWithConfig(ctx context.Context, uid int, username, password string, loginURL, redirectURL string, cookieCache CookieCache) error
 }
 
 // jwcSessionService 教务系统会话服务实现
@@ -93,111 +103,7 @@ func (s *jwcSessionService) LoginAndCache(ctx context.Context, uid int, username
 
 // loginAndCacheOnce 单次登录逻辑
 func (s *jwcSessionService) loginAndCacheOnce(ctx context.Context, uid int, username, password string) error {
-	// 创建 cookie jar
-	jar, err := cookiejar.New(&cookiejar.Options{
-		PublicSuffixList: publicsuffix.List,
-	})
-	if err != nil {
-		return common.NewAppError(common.CodeJwcLoginFailed, "创建会话失败")
-	}
-
-	client := &http.Client{
-		Jar:     jar,
-		Timeout: s.timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse // 禁止自动跳转（CAS 必须手动）
-		},
-	}
-
-	// 1. 请求登录页获取 execution
-	res, err := client.Get(s.loginURL)
-	if err != nil {
-		return common.NewAppError(common.CodeJwcLoginFailed, "连接教务系统失败")
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("响应异常: %d", res.StatusCode))
-	}
-
-	doc, err := goquery.NewDocumentFromReader(res.Body)
-	if err != nil {
-		return common.NewAppError(common.CodeJwcParseFailed, "解析登录页面失败")
-	}
-
-	execution := doc.Find("input[name='execution']").AttrOr("value", "")
-	if execution == "" {
-		return common.NewAppError(common.CodeJwcLoginFailed, "找不到 execution")
-	}
-
-	// 2. 密码加密
-	encryptedPwd, err := s.encryptPassword(password)
-	if err != nil {
-		return common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("密码加密失败: %v", err))
-	}
-
-	fpVisitorId, err := s.GenerateRandomFingerPrintHash()
-	if err != nil {
-		return common.NewAppError(common.CodeInternalError, "生成设备指纹失败")
-	}
-
-	form := url.Values{
-		"username":    {username},
-		"password":    {encryptedPwd},
-		"execution":   {execution},
-		"fpVisitorId": {fpVisitorId},
-		"rememberMe":  {"on"},
-		"_eventId":    {"submit"},
-		"failN":       {"0"},
-		"submit1":     {"login1"},
-	}
-
-	// 3. 构造 POST 请求
-	req, err := http.NewRequest("POST", s.loginURL, strings.NewReader(form.Encode()))
-	if err != nil {
-		return common.NewAppError(common.CodeJwcLoginFailed, "构造登录请求失败")
-	}
-
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Referer", s.loginURL)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return common.NewAppError(common.CodeJwcLoginFailed, "登录失败")
-	}
-
-	resp.Body.Close()
-
-	if resp.StatusCode != 302 {
-		return common.NewAppError(common.CodeJwcLoginFailed, "重定向并非302")
-	}
-
-	//直接不处理重定向，用这个tgc的cookie去get教务系统，触发下一条重定向链，get全自动重定向
-
-	finalResp, finalURL, err := s.followGET(client, s.redirectURL, 8)
-	if err != nil {
-		return common.NewAppError(common.CodeJwcLoginFailed, "跟随重定向失败")
-	}
-	defer finalResp.Body.Close()
-
-	// 6. 提取并缓存 cookies
-	uFinal, _ := url.Parse(finalURL)
-	base := &url.URL{Scheme: uFinal.Scheme, Host: uFinal.Host, Path: "/"}
-	cookies := client.Jar.Cookies(base)
-
-	if len(cookies) == 0 {
-		if u, e := url.Parse(s.redirectURL); e == nil {
-			cookies = client.Jar.Cookies(u)
-		}
-	}
-
-	// 7. 存入缓存
-	if err := s.sessionCache.SetCookies(ctx, uid, cookies, s.cacheExpire); err != nil {
-		return common.NewAppError(common.CodeCacheError, "缓存会话失败")
-	}
-
-	return nil
+	return s.LoginAndCacheWithConfig(ctx, uid, username, password, s.loginURL, s.redirectURL, s.sessionCache)
 }
 
 func (s *jwcSessionService) followGET(client *http.Client, start string, maxHops int) (*http.Response, string, error) {
@@ -337,7 +243,8 @@ func (s *jwcSessionService) ReplaceClientID(rawURL, newClientID string) (string,
 	return u.String(), nil
 }
 
-func (s *jwcSessionService) loginAndCacheOnceByWebVPN(ctx context.Context, uid int, username, password string) error {
+// LoginAndCacheWithConfig 通用登录方法，支持自定义 URL 和缓存
+func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int, username, password string, loginURL, redirectURL string, cookieCache CookieCache) error {
 	// 创建 cookie jar
 	jar, err := cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
@@ -355,9 +262,9 @@ func (s *jwcSessionService) loginAndCacheOnceByWebVPN(ctx context.Context, uid i
 	}
 
 	// 1. 请求登录页获取 execution
-	res, err := client.Get(s.loginURL)
+	res, err := client.Get(loginURL)
 	if err != nil {
-		return common.NewAppError(common.CodeJwcLoginFailed, "连接教务系统失败")
+		return common.NewAppError(common.CodeJwcLoginFailed, "连接系统失败")
 	}
 	defer res.Body.Close()
 
@@ -398,14 +305,14 @@ func (s *jwcSessionService) loginAndCacheOnceByWebVPN(ctx context.Context, uid i
 	}
 
 	// 3. 构造 POST 请求
-	req, err := http.NewRequest("POST", s.loginURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequest("POST", loginURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return common.NewAppError(common.CodeJwcLoginFailed, "构造登录请求失败")
 	}
 
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Referer", s.loginURL)
+	req.Header.Set("Referer", loginURL)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -418,9 +325,8 @@ func (s *jwcSessionService) loginAndCacheOnceByWebVPN(ctx context.Context, uid i
 		return common.NewAppError(common.CodeJwcLoginFailed, "重定向并非302")
 	}
 
-	//直接不处理重定向，用这个tgc的cookie去get教务系统，触发下一条重定向链，get全自动重定向
-
-	finalResp, finalURL, err := s.followGET(client, s.redirectURL, 8)
+	// 直接不处理重定向，用这个tgc的cookie去get系统，触发下一条重定向链，get全自动重定向
+	finalResp, finalURL, err := s.followGET(client, redirectURL, 8)
 	if err != nil {
 		return common.NewAppError(common.CodeJwcLoginFailed, "跟随重定向失败")
 	}
@@ -432,15 +338,19 @@ func (s *jwcSessionService) loginAndCacheOnceByWebVPN(ctx context.Context, uid i
 	cookies := client.Jar.Cookies(base)
 
 	if len(cookies) == 0 {
-		if u, e := url.Parse(s.redirectURL); e == nil {
+		if u, e := url.Parse(redirectURL); e == nil {
 			cookies = client.Jar.Cookies(u)
 		}
 	}
 
 	// 7. 存入缓存
-	if err := s.sessionCache.SetCookies(ctx, uid, cookies, s.cacheExpire); err != nil {
+	if err := cookieCache.SetCookies(ctx, uid, cookies, s.cacheExpire); err != nil {
 		return common.NewAppError(common.CodeCacheError, "缓存会话失败")
 	}
 
 	return nil
+}
+
+func (s *jwcSessionService) loginAndCacheOnceByWebVPN(ctx context.Context, uid int, username, password string) error {
+	return s.LoginAndCacheWithConfig(ctx, uid, username, password, s.loginURL, s.redirectURL, s.sessionCache)
 }

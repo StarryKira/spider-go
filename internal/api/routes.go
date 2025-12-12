@@ -57,5 +57,7 @@ func SetupRoutes(r *gin.Engine, container *app.Container) {
 
 		// 通知模块（包含公开和管理员路由）
 		container.NoticeModule.RegisterRoutes(api, adminAuth)
+		//教评模块
+		container.EvaluationModule.RegisterRoutes(userAuth)
 	}
 }

@@ -31,7 +31,7 @@ func NewEvaluationCache(client *redis.Client) EvaluationCache {
 	}
 }
 func (rc *RedisEvaluationCache) getUserKey(uid int) string {
-	return "session:" + strconv.Itoa(uid)
+	return "evaluation:" + strconv.Itoa(uid)
 }
 
 func (rc *RedisEvaluationCache) GetCookies(ctx context.Context, uid int) ([]*http.Cookie, error) {

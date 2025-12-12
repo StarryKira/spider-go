@@ -1,6 +1,10 @@
 package evaluation
 
-import "github.com/gin-gonic/gin"
+import (
+	"spider-go/internal/common"
+
+	"github.com/gin-gonic/gin"
+)
 
 type Handler struct {
 	service Service
@@ -20,6 +24,18 @@ func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
 }
 
 func (h *Handler) GetEvaluationInfo(c *gin.Context) {
-	uid := c.Param("uid")
+	uidValue, ok := c.Get("uid")
+	if !ok {
+		common.Error(c, common.CodeUnauthorized, "未授权，请登录")
+		return
+	}
 
+	uid := uidValue.(int)
+
+	data, err := h.service.GetEvaluationInfo(c, uid)
+	if err != nil {
+		common.Error(c, common.CodeInternalError, err.Error())
+		return
+	}
+	common.Success(c, data)
 }

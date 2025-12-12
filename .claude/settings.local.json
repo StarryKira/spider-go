@@ -8,7 +8,8 @@
       "Bash(go run golang.org/x/tools/cmd/goimports@latest -w internal/service/session_service.go)",
       "Bash(./spider-go.exe)",
       "Bash(timeout 3 ./spider-go.exe)",
-      "Bash(timeout 2 ./spider-go.exe)"
+      "Bash(timeout 2 ./spider-go.exe)",
+      "Bash(go build -o spider-go.exe)"
     ],
     "deny": [],
     "ask": []
