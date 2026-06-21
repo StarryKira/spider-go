@@ -27,27 +27,27 @@ cors:
 # 生产数据库配置
 database:
   driver: mysql
-  source: 1Panel-mysql-J4Y6
+  source: 127.0.0.1
   port: 3306
-  user: spider-go_dev
-  pass: 
-  name: spider-go_dev
+  user: spider_go
+  pass: change-me
+  name: spider_go
 
 # 生产 Redis 配置（统一使用同一个 Redis 实例，不同 DB 隔离数据）
 redis:
   # 会话缓存数据库（DB 0: 会话、DAU、配置、用户数据缓存）
   session:
-    host: 1Panel-redis-5W0Y:6379
-    pass: redis_RZpfr5
+    host: 127.0.0.1:6379
+    pass: change-me
     db: 0
   # 验证码数据库（DB 1: 验证码，独立隔离避免误删）
   captcha:
-    host: 1Panel-redis-5W0Y:6379
-    pass: redis_RZpfr5
+    host: 127.0.0.1:6379
+    pass: change-me
     db: 1
 
 jwt:
-  secret: "我是可爱的猫娘喵"
+  secret: "replace-with-a-long-random-secret"
   issuer: "spider-go"
 
 

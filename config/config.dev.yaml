@@ -28,23 +28,23 @@ cors:
 # 开发数据库配置
 database:
   driver: mysql
-  source: 118.26.38.103
+  source: 127.0.0.1
   port: 3306
-  user: spider-dev
-  pass: yNNZANefzDS3fM3t
-  name: spider-dev
+  user: spider_go
+  pass: change-me
+  name: spider_go
 
 # 开发 Redis 配置（统一使用同一个 Redis 实例）
 redis:
   # 会话缓存数据库（DB 0: 会话、DAU、配置、用户数据缓存）
   session:
-    host: 118.26.38.103:6379
-    pass: redis_RMx4Md
+    host: 127.0.0.1:6379
+    pass: change-me
     db: 0
   # 验证码数据库（DB 1: 验证码）
   captcha:
-    host: 118.26.38.103:6379
-    pass: redis_RMx4Md
+    host: 127.0.0.1:6379
+    pass: change-me
     db: 1
 
 jwt:
@@ -92,7 +92,7 @@ email:
   # SMTP 邮件服务器配置（开发环境可以使用测试邮箱）
   smtp_host: "smtp.qq.com"
   smtp_port: 465
-  username: "1628615876@qq.com"
+  username: "your-email@qq.com"
   password: ""
   from_name: "Spider-Go 验证码 [DEV]"
 
