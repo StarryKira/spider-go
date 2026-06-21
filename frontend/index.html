@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Spider Go 教务数据控制台">
+  <title>Spider Go · 教务控制台</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <main id="authView" class="auth-shell">
+    <section class="brand-panel">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" role="img">
+          <path d="M12 10h24a6 6 0 0 1 6 6v16a6 6 0 0 1-6 6H12a6 6 0 0 1-6-6V16a6 6 0 0 1 6-6Z"/>
+          <path d="M15 19h18M15 25h13M15 31h8"/>
+        </svg>
+      </div>
+      <p class="eyebrow">SPIDER GO</p>
+      <h1>把教务数据<br>收进一张桌面。</h1>
+      <p class="brand-copy">成绩、课表和考试安排，在一个安静、清晰的空间里完成查询。</p>
+      <div class="feature-row">
+        <span>实时查询</span><span>本地部署</span><span>隐私优先</span>
+      </div>
+    </section>
+
+    <section class="auth-card">
+      <div class="auth-heading">
+        <p class="eyebrow">欢迎回来</p>
+        <h2 id="authTitle">登录账户</h2>
+        <p id="authSubtitle">使用 Spider Go 账户继续</p>
+      </div>
+
+      <div class="role-tabs" role="tablist" aria-label="登录身份">
+        <button class="role-tab active" data-auth-role="user" type="button">学生端</button>
+        <button class="role-tab" data-auth-role="admin" type="button">管理员</button>
+      </div>
+
+      <div id="userAuthTabs" class="auth-tabs" role="tablist">
+        <button class="auth-tab active" data-auth-mode="login" type="button">登录</button>
+        <button class="auth-tab" data-auth-mode="register" type="button">注册</button>
+      </div>
+
+      <form id="loginForm" class="form-stack">
+        <label>邮箱<input id="loginEmail" type="email" autocomplete="email" placeholder="name@example.com" required></label>
+        <label>密码<input id="loginPassword" type="password" autocomplete="current-password" placeholder="至少 6 位" required></label>
+        <button class="primary-button" type="submit"><span>进入控制台</span><span>→</span></button>
+      </form>
+
+      <form id="registerForm" class="form-stack hidden">
+        <label>姓名<input id="registerName" type="text" autocomplete="name" placeholder="你的姓名" required></label>
+        <label>邮箱<input id="registerEmail" type="email" autocomplete="email" placeholder="name@example.com" required></label>
+        <label>密码<input id="registerPassword" type="password" autocomplete="new-password" minlength="6" placeholder="至少 6 位" required></label>
+        <label>邮箱验证码
+          <span class="input-action">
+            <input id="registerCaptcha" type="text" inputmode="numeric" placeholder="6 位验证码" required>
+            <button id="sendCaptchaButton" type="button">发送验证码</button>
+          </span>
+        </label>
+        <button class="primary-button" type="submit"><span>创建账户</span><span>→</span></button>
+      </form>
+      <p id="authNote" class="auth-note">教务密码仅用于向学校教务系统发起查询。</p>
+    </section>
+  </main>
+
+  <div id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <a class="sidebar-brand" href="#" aria-label="Spider Go 首页">
+        <span class="mini-mark">S</span>
+        <span><strong>Spider Go</strong><small>教务控制台</small></span>
+      </a>
+      <nav class="nav-list">
+        <button class="nav-item active" data-app-role="user" data-view="overview"><span>01</span>概览</button>
+        <button class="nav-item" data-app-role="user" data-view="grades"><span>02</span>成绩</button>
+        <button class="nav-item" data-app-role="user" data-view="courses"><span>03</span>课表</button>
+        <button class="nav-item" data-app-role="user" data-view="exams"><span>04</span>考试</button>
+        <button class="nav-item" data-app-role="user" data-view="account"><span>05</span>账户</button>
+        <button class="nav-item hidden" data-app-role="admin" data-view="adminOverview"><span>01</span>系统概览</button>
+        <button class="nav-item hidden" data-app-role="admin" data-view="adminConfig"><span>02</span>学期配置</button>
+        <button class="nav-item hidden" data-app-role="admin" data-view="adminNotices"><span>03</span>通知管理</button>
+        <button class="nav-item hidden" data-app-role="admin" data-view="adminAccount"><span>04</span>管理员账户</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="service-dot"><i></i>服务运行中</div>
+        <button id="logoutButton" class="text-button" type="button">退出登录</button>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <button id="menuButton" class="menu-button" type="button" aria-label="打开菜单">☰</button>
+        <div>
+          <p id="pageEyebrow" class="eyebrow">今日概览</p>
+          <h2 id="pageTitle">你好，<span id="welcomeName">同学</span></h2>
+        </div>
+        <div class="profile-chip">
+          <span id="profileInitial">同</span>
+          <div><strong id="profileName">同学</strong><small id="profileSid">未绑定学号</small></div>
+        </div>
+      </header>
+
+      <div class="content">
+        <section id="overviewView" class="view-section active">
+          <div class="hero-card">
+            <div>
+              <p class="eyebrow">CURRENT TERM</p>
+              <h3 id="currentTermText">加载中...</h3>
+              <p>选择一个方向，开始查询你的教务数据。</p>
+            </div>
+            <div class="hero-orbit"><span></span><i></i></div>
+          </div>
+
+          <div class="stat-grid">
+            <article class="stat-card"><p>绑定状态</p><strong id="bindStat">检查中</strong><small id="bindHint">正在连接教务服务</small></article>
+            <article class="stat-card"><p>账户邮箱</p><strong id="emailStat">--</strong><small>Spider Go 登录账户</small></article>
+            <article class="stat-card accent"><p>快捷入口</p><strong>本周课表</strong><button class="inline-link" data-jump="courses">立即查看 →</button></article>
+          </div>
+
+          <div id="bindPanel" class="panel hidden">
+            <div class="panel-heading"><div><p class="eyebrow">首次使用</p><h3>绑定教务系统</h3></div><span class="status-pill warning">尚未绑定</span></div>
+            <p class="panel-copy">绑定后才能查询成绩、课程和考试。请使用学校教务系统的学号与密码。</p>
+            <form id="bindForm" class="inline-form">
+              <label>学号<input id="bindSid" type="text" autocomplete="username" required></label>
+              <label>教务密码<input id="bindPassword" type="password" autocomplete="current-password" required></label>
+              <button class="primary-button compact" type="submit">确认绑定</button>
+            </form>
+          </div>
+        </section>
+
+        <section id="gradesView" class="view-section">
+          <div class="section-head"><div><p class="eyebrow">ACADEMIC RECORD</p><h3>成绩查询</h3></div><form id="gradesFilter" class="filter-form"><input id="gradesTerm" placeholder="2025-2026-2"><button type="submit">查询</button></form></div>
+          <div id="gpaCards" class="metric-row hidden"></div>
+          <div class="table-panel"><div id="gradesEmpty" class="empty-state">输入学期后查询成绩，留空可查询全部。</div><div class="table-wrap hidden" id="gradesTableWrap"><table><thead><tr><th>课程</th><th>学期</th><th>成绩</th><th>学分</th><th>绩点</th><th>性质</th></tr></thead><tbody id="gradesBody"></tbody></table></div></div>
+        </section>
+
+        <section id="coursesView" class="view-section">
+          <div class="section-head"><div><p class="eyebrow">WEEKLY SCHEDULE</p><h3>课程表</h3></div><form id="coursesFilter" class="filter-form"><input id="coursesTerm" placeholder="2025-2026-2" required><input id="coursesWeek" type="number" min="1" max="20" value="1" required><button type="submit">查询</button></form></div>
+          <div id="scheduleMeta" class="schedule-meta hidden"></div>
+          <div id="coursesGrid" class="course-grid"><div class="empty-state wide">选择学期和周次，查看一周课程。</div></div>
+        </section>
+
+        <section id="examsView" class="view-section">
+          <div class="section-head"><div><p class="eyebrow">EXAM PLAN</p><h3>考试安排</h3></div><form id="examsFilter" class="filter-form"><input id="examsTerm" placeholder="2025-2026-2" required><button type="submit">查询</button></form></div>
+          <div id="examsList" class="exam-list"><div class="empty-state">输入学期，查看考试时间与地点。</div></div>
+        </section>
+
+        <section id="accountView" class="view-section">
+          <div class="section-head"><div><p class="eyebrow">ACCOUNT</p><h3>账户信息</h3></div></div>
+          <div class="account-grid">
+            <article class="panel"><p class="eyebrow">基本信息</p><dl id="accountDetails"></dl></article>
+            <article class="panel"><p class="eyebrow">教务绑定</p><dl id="bindDetails"></dl></article>
+          </div>
+        </section>
+
+        <section id="adminOverviewView" class="view-section">
+          <div class="hero-card admin-hero">
+            <div><p class="eyebrow">ADMIN CONSOLE</p><h3>系统运行正常</h3><p>在这里管理本地 Spider Go 服务。</p></div>
+            <div class="hero-orbit"><span></span><i></i></div>
+          </div>
+          <div class="stat-grid">
+            <article class="stat-card"><p>普通用户</p><strong id="adminUserCount">--</strong><small>数据库账户总数</small></article>
+            <article class="stat-card"><p>今日活跃</p><strong id="adminDauCount">--</strong><small id="adminDauDate">今日 DAU</small></article>
+            <article class="stat-card accent"><p>当前学期</p><strong id="adminCurrentTerm">--</strong><button class="inline-link" data-jump="adminConfig">修改配置 →</button></article>
+          </div>
+          <div class="panel admin-welcome">
+            <div><p class="eyebrow">LOCAL DEPLOYMENT</p><h3>本地管理模式</h3></div>
+            <p class="panel-copy">后端、MySQL、Redis 与前端均由 Docker Compose 管理。管理员 Token 仅保存在当前浏览器中。</p>
+          </div>
+        </section>
+
+        <section id="adminConfigView" class="view-section">
+          <div class="section-head"><div><p class="eyebrow">SEMESTER CONFIG</p><h3>学期配置</h3></div></div>
+          <div class="account-grid">
+            <article class="panel">
+              <p class="eyebrow">当前学期</p>
+              <form id="termForm" class="form-stack admin-form">
+                <label>学期<input id="adminTermInput" placeholder="例如 2025-2026-2" required></label>
+                <button class="primary-button" type="submit"><span>保存当前学期</span><span>→</span></button>
+              </form>
+            </article>
+            <article class="panel">
+              <p class="eyebrow">学期日期</p>
+              <form id="semesterDatesForm" class="form-stack admin-form">
+                <label>学期<input id="datesTermInput" placeholder="例如 2025-2026-2" required></label>
+                <div class="date-fields"><label>开始日期<input id="semesterStart" type="date" required></label><label>结束日期<input id="semesterEnd" type="date" required></label></div>
+                <button class="primary-button" type="submit"><span>保存学期日期</span><span>→</span></button>
+              </form>
+            </article>
+          </div>
+        </section>
+
+        <section id="adminNoticesView" class="view-section">
+          <div class="section-head"><div><p class="eyebrow">NOTICE MANAGEMENT</p><h3>通知管理</h3></div></div>
+          <div class="notice-layout">
+            <article class="panel">
+              <p class="eyebrow">发布通知</p>
+              <form id="noticeForm" class="form-stack admin-form">
+                <label>通知内容<textarea id="noticeContent" rows="6" placeholder="输入要发布的通知" required></textarea></label>
+                <label>通知类型<input id="noticeType" value="general" placeholder="general"></label>
+                <div class="check-row"><label><input id="noticeShow" type="checkbox" checked> 对用户显示</label><label><input id="noticeTop" type="checkbox"> 置顶</label></div>
+                <button class="primary-button" type="submit"><span>发布通知</span><span>→</span></button>
+              </form>
+            </article>
+            <div id="adminNoticeList" class="notice-list"><div class="empty-state">正在加载通知...</div></div>
+          </div>
+        </section>
+
+        <section id="adminAccountView" class="view-section">
+          <div class="section-head"><div><p class="eyebrow">ADMIN ACCOUNT</p><h3>管理员账户</h3></div></div>
+          <div class="account-grid">
+            <article class="panel"><p class="eyebrow">账户信息</p><dl id="adminAccountDetails"></dl></article>
+            <article class="panel">
+              <p class="eyebrow">修改密码</p>
+              <form id="adminPasswordForm" class="form-stack admin-form">
+                <label>当前密码<input id="adminOldPassword" type="password" required></label>
+                <label>新密码<input id="adminNewPassword" type="password" minlength="6" required></label>
+                <button class="primary-button" type="submit"><span>更新密码</span><span>→</span></button>
+              </form>
+            </article>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="loading" class="loading hidden"><span></span><p>正在连接教务系统...</p></div>
+  <script src="/app.js"></script>
+</body>
+</html>

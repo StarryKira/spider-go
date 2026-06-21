@@ -1,0 +1,72 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  app:
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      TZ: Asia/Shanghai
+      GO_ENV: production
+    volumes:
+      - ./deploy/config.production.yaml:/app/config/config.production.yaml:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/api/config/term"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_DATABASE: spider_go
+      MYSQL_USER: spider_go
+      MYSQL_PASSWORD: spider_go_local
+      MYSQL_ROOT_PASSWORD: spider_go_root_local
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "spider_redis_local"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "spider_redis_local", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mysql_data:
+  redis_data:

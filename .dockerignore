@@ -1,0 +1,10 @@
+.git
+.idea
+.claude
+Dockerfile*
+compose*.yaml
+deploy
+frontend
+.playwright-cli
+*.md
+*.log

@@ -48,6 +48,7 @@ type JwcConfig struct {
 // JwcModeConfig 教务系统单个模式的配置
 type JwcModeConfig struct {
 	LoginURL      string `yaml:"login_url" mapstructure:"login_url"`
+	WebVPNTokenURL string `yaml:"webvpn_token_url" mapstructure:"webvpn_token_url"`
 	RedirectURL   string `yaml:"redirect_url" mapstructure:"redirect_url"`
 	CourseURL     string `yaml:"course_url" mapstructure:"course_url"`
 	GradeURL      string `yaml:"grade_url" mapstructure:"grade_url"`
