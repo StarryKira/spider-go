@@ -207,6 +207,7 @@ func (c *Container) initServices() {
 		c.RSAKeyService,
 		c.Config.Jwc.Mode, // 注入当前模式
 		currentMode.LoginURL,
+		currentMode.WebVPNTokenURL,
 		currentMode.RedirectURL,
 		c.Config.Jwc.MFADetectURL,
 		c.Config.Jwc.CaptchaURL,

@@ -244,9 +244,15 @@ func (s *userService) BindJwc(ctx context.Context, uid int, sid, spwd, ipAddress
 
 	// 4. 验证教务系统账号
 	if err := s.sessionService.LoginCheck(ctx, sid, spwd); err != nil {
-		// 记录失败日志
-		_ = s.logBindAttempt(ctx, uid, user.Sid, sid, BindStatusFailedAuth, "教务系统账号或密码错误", ipAddress, userAgent)
-		return common.NewAppError(common.CodeJwcLoginFailed, "用户名或密码错误")
+		message := err.Error()
+		if appErr, ok := err.(*common.AppError); ok {
+			message = appErr.Message
+			_ = s.logBindAttempt(ctx, uid, user.Sid, sid, BindStatusFailedAuth, message, ipAddress, userAgent)
+			return appErr
+		}
+
+		_ = s.logBindAttempt(ctx, uid, user.Sid, sid, BindStatusFailedAuth, message, ipAddress, userAgent)
+		return common.NewAppError(common.CodeJwcLoginFailed, message)
 	}
 
 	// 5. 开启事务：更新绑定信息

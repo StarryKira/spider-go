@@ -55,6 +55,7 @@ type jwcSessionService struct {
 	rsaKeyService   RSAKeyService
 	mode            string // 登录模式：campus 或 webvpn
 	loginURL        string
+	webVPNTokenURL  string
 	redirectURL     string
 	mfaDetectURL    string
 	captchaURL      string
@@ -70,6 +71,7 @@ func NewJwcSessionService(
 	rsaKeyService RSAKeyService,
 	mode string,
 	loginURL string,
+	webVPNTokenURL string,
 	redirectURL string,
 	mfaDetectURL string,
 	captchaURL string,
@@ -80,6 +82,7 @@ func NewJwcSessionService(
 		rsaKeyService:   rsaKeyService,
 		mode:            mode,
 		loginURL:        loginURL,
+		webVPNTokenURL:  webVPNTokenURL,
 		redirectURL:     redirectURL,
 		mfaDetectURL:    mfaDetectURL,
 		captchaURL:      captchaURL,
@@ -283,7 +286,7 @@ func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int
 	}
 
 	// 2.5 MFA 检测
-	needMFA, _, err := s.detectMFA(ctx, username, password, fpVisitorId)
+	needMFA, mfaState, err := s.detectMFA(ctx, username, password, fpVisitorId)
 	if err != nil {
 		return err
 	}
@@ -298,8 +301,10 @@ func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int
 		"fpVisitorId": {fpVisitorId},
 		"rememberMe":  {"on"},
 		"_eventId":    {"submit"},
-		"failN":       {"0"},
-		"submit1":     {"login1"},
+		"failN":       {"-1"},
+		"currentMenu": {"1"},
+		"mfaState":    {mfaState},
+		"geolocation": {""},
 	}
 
 	// 3. 构造 POST 请求
@@ -323,6 +328,7 @@ func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int
 	}
 
 	resp.Body.Close()
+	loginRedirect := resp.Header.Get("Location")
 
 	// CAS 登录的预期行为：
 	// - 302: 登录成功，跳转到目标系统
@@ -343,6 +349,63 @@ func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int
 	}
 
 	// 4. 提取并缓存 CAS TGC cookie（登录成功后立即保存）
+	if s.mode == "webvpn" && s.webVPNTokenURL != "" && loginRedirect != "" {
+		callbackURL, parseErr := url.Parse(loginRedirect)
+		if parseErr != nil {
+			return common.NewAppError(common.CodeJwcRequestFailed, "WebVPN 回调地址无效")
+		}
+		ticket := callbackURL.Query().Get("ticket")
+		externalID := strings.TrimPrefix(callbackURL.Path, "/callback/cas/")
+		callbackURL.RawQuery = ""
+		if ticket == "" || externalID == "" {
+			return common.NewAppError(common.CodeJwcRequestFailed, "WebVPN 回调缺少认证参数")
+		}
+
+		deviceID := fpVisitorId
+		if len(deviceID) > 32 {
+			deviceID = deviceID[:32]
+		}
+		dataPayload, _ := json.Marshal(map[string]string{
+			"callbackUrl": callbackURL.String(),
+			"ticket":      ticket,
+			"deviceId":    deviceID,
+		})
+		finishPayload, _ := json.Marshal(map[string]string{
+			"externalId": externalID,
+			"data":       string(dataPayload),
+		})
+		finishReq, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, s.webVPNTokenURL, strings.NewReader(string(finishPayload)))
+		if requestErr != nil {
+			return common.NewAppError(common.CodeJwcRequestFailed, "构造 WebVPN 认证请求失败")
+		}
+		finishReq.Header.Set("Content-Type", "application/json")
+		finishReq.Header.Set("Accept", "application/json, text/plain, */*")
+		finishReq.Header.Set("Referer", loginRedirect)
+		finishReq.Header.Set("User-Agent", "Mozilla/5.0")
+		finishResp, finishErr := client.Do(finishReq)
+		if finishErr != nil {
+			return common.NewAppError(common.CodeJwcRequestFailed, "WebVPN 认证请求失败")
+		}
+		_ = finishResp.Body.Close()
+		if finishResp.StatusCode != http.StatusOK {
+			return common.NewAppError(common.CodeJwcRequestFailed, fmt.Sprintf("WebVPN 认证失败: %d", finishResp.StatusCode))
+		}
+	}
+
+	if loginRedirect != "" {
+		redirectBase, parseErr := url.Parse(loginURL)
+		redirectTarget, targetErr := url.Parse(loginRedirect)
+		if parseErr == nil && targetErr == nil {
+			loginRedirect = redirectBase.ResolveReference(redirectTarget).String()
+		}
+
+		callbackResp, _, followErr := s.followGET(client, loginRedirect, 8)
+		if followErr != nil {
+			return common.NewAppError(common.CodeJwcRequestFailed, fmt.Sprintf("统一认证回调失败: %v", followErr))
+		}
+		_ = callbackResp.Body.Close()
+	}
+
 	casURL, _ := url.Parse(loginURL)
 	casCookies := client.Jar.Cookies(casURL)
 	for _, cookie := range casCookies {
@@ -369,13 +432,20 @@ func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int
 	defer finalResp.Body.Close()
 
 	// 5. 提取并缓存 cookies
-	uFinal, _ := url.Parse(finalURL)
-	base := &url.URL{Scheme: uFinal.Scheme, Host: uFinal.Host, Path: "/"}
-	cookies := client.Jar.Cookies(base)
-
-	if len(cookies) == 0 {
-		if u, e := url.Parse(redirectURL); e == nil {
-			cookies = client.Jar.Cookies(u)
+	var cookies []*http.Cookie
+	seenCookies := make(map[string]bool)
+	for _, rawURL := range []string{finalURL, redirectURL, loginRedirect, loginURL} {
+		u, parseErr := url.Parse(rawURL)
+		if parseErr != nil || u.Host == "" {
+			continue
+		}
+		base := &url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/"}
+		for _, cookie := range client.Jar.Cookies(base) {
+			key := cookie.Name + "|" + cookie.Domain + "|" + cookie.Path
+			if !seenCookies[key] {
+				seenCookies[key] = true
+				cookies = append(cookies, cookie)
+			}
 		}
 	}
 
@@ -447,7 +517,7 @@ func (s *jwcSessionService) LoginAndGetClient(ctx context.Context, username, pas
 	}
 
 	// MFA 检测
-	needMFA, _, err := s.detectMFA(ctx, username, password, fpVisitorId)
+	needMFA, mfaState, err := s.detectMFA(ctx, username, password, fpVisitorId)
 	if err != nil {
 		return nil, err
 	}
@@ -462,8 +532,10 @@ func (s *jwcSessionService) LoginAndGetClient(ctx context.Context, username, pas
 		"fpVisitorId": {fpVisitorId},
 		"rememberMe":  {"on"},
 		"_eventId":    {"submit"},
-		"failN":       {"0"},
-		"submit1":     {"login1"},
+		"failN":       {"-1"},
+		"currentMenu": {"1"},
+		"mfaState":    {mfaState},
+		"geolocation": {""},
 	}
 
 	// 构造 POST 请求
@@ -552,7 +624,7 @@ func (s *jwcSessionService) LoginCheck(ctx context.Context, username, password s
 	}
 
 	// MFA 检测
-	needMFA, _, err := s.detectMFA(ctx, username, password, fpVisitorId)
+	needMFA, mfaState, err := s.detectMFA(ctx, username, password, fpVisitorId)
 	if err != nil {
 		return err
 	}
@@ -567,8 +639,10 @@ func (s *jwcSessionService) LoginCheck(ctx context.Context, username, password s
 		"fpVisitorId": {fpVisitorId},
 		"rememberMe":  {"on"},
 		"_eventId":    {"submit"},
-		"failN":       {"0"},
-		"submit1":     {"login1"},
+		"failN":       {"-1"},
+		"currentMenu": {"1"},
+		"mfaState":    {mfaState},
+		"geolocation": {""},
 	}
 
 	// 构造 POST 请求
@@ -589,11 +663,20 @@ func (s *jwcSessionService) LoginCheck(ctx context.Context, username, password s
 		}
 		return common.NewAppError(common.CodeJwcRequestFailed, "教务系统网络连接失败")
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	if resp.StatusCode == 200 {
-		// 返回 200 表示登录失败（表单页面）
-		return common.NewAppError(common.CodeJwcLoginFailed, "用户名或密码错误")
+		// CAS 登录失败时会重新返回表单页，优先透传页面上的具体错误原因。
+		doc, parseErr := goquery.NewDocumentFromReader(resp.Body)
+		if parseErr == nil {
+			selectors := []string{"#msg", "#errorMsg", ".login-error", ".errors", ".error", ".alert-danger"}
+			for _, selector := range selectors {
+				if message := strings.TrimSpace(doc.Find(selector).First().Text()); message != "" {
+					return common.NewAppError(common.CodeJwcLoginFailed, message)
+				}
+			}
+		}
+		return common.NewAppError(common.CodeJwcLoginFailed, "统一认证未通过，可能需要验证码或多因素认证")
 	} else if resp.StatusCode == 302 {
 		// 登录成功
 	} else if resp.StatusCode >= 500 {
