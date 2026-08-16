@@ -44,8 +44,9 @@ const (
 
 // AppError 应用错误
 type AppError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
 }
 
 // Error 实现 error 接口
@@ -58,6 +59,15 @@ func NewAppError(code int, message string) *AppError {
 	return &AppError{
 		Code:    code,
 		Message: message,
+	}
+}
+
+// NewAppErrorWithData 创建带附加数据的应用错误
+func NewAppErrorWithData(code int, message string, data interface{}) *AppError {
+	return &AppError{
+		Code:    code,
+		Message: message,
+		Data:    data,
 	}
 }
 

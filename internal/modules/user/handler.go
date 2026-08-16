@@ -40,6 +40,8 @@ func (h *Handler) RegisterRoutes(public *gin.RouterGroup, authenticated *gin.Rou
 
 	authenticated.GET("/info", h.GetUserInfo)          // 获取用户信息
 	authenticated.POST("/bind", h.BindJwc)             // 绑定教务系统
+	authenticated.POST("/mfa/verify", h.VerifyJwcMFA)  // 提交教务安全手机验证码
+	authenticated.POST("/mfa/resend", h.ResendJwcMFA)  // 重发教务安全手机验证码
 	authenticated.GET("/is-bind", h.CheckIsBind)       // 检查绑定状态
 	authenticated.GET("/bind-status", h.GetBindStatus) // 获取绑定状态（包含绑定次数信息）
 	authenticated.POST("/wechat/bind", h.WeChatBind)   // 老用户绑定微信
@@ -190,7 +192,7 @@ func (h *Handler) BindJwc(c *gin.Context) {
 	if err := h.service.BindJwc(c.Request.Context(), uid.(int), req.Sid, req.Spwd, ipAddress, userAgent); err != nil {
 		// 使用AppError统一处理错误响应
 		if appErr, ok := err.(*common.AppError); ok {
-			common.Error(c, appErr.Code, appErr.Message)
+			common.ErrorWithAppError(c, appErr)
 		} else {
 			common.Error(c, common.CodeInternalError, err.Error())
 		}
@@ -198,6 +200,50 @@ func (h *Handler) BindJwc(c *gin.Context) {
 	}
 
 	common.Success(c, gin.H{"message": "绑定成功"})
+}
+
+func (h *Handler) VerifyJwcMFA(c *gin.Context) {
+	uid, exists := c.Get("uid")
+	if !exists {
+		common.Error(c, common.CodeUnauthorized, "未授权")
+		return
+	}
+
+	var req VerifyJwcMFARequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.Error(c, common.CodeInvalidParams, err.Error())
+		return
+	}
+
+	if err := h.service.VerifyJwcMFA(c.Request.Context(), uid.(int), req.Code, c.ClientIP(), c.Request.UserAgent()); err != nil {
+		if appErr, ok := err.(*common.AppError); ok {
+			common.ErrorWithAppError(c, appErr)
+		} else {
+			common.Error(c, common.CodeInternalError, err.Error())
+		}
+		return
+	}
+
+	common.Success(c, gin.H{"message": "验证成功"})
+}
+
+func (h *Handler) ResendJwcMFA(c *gin.Context) {
+	uid, exists := c.Get("uid")
+	if !exists {
+		common.Error(c, common.CodeUnauthorized, "未授权")
+		return
+	}
+
+	if err := h.service.ResendJwcMFA(c.Request.Context(), uid.(int)); err != nil {
+		if appErr, ok := err.(*common.AppError); ok {
+			common.ErrorWithAppError(c, appErr)
+		} else {
+			common.Error(c, common.CodeInternalError, err.Error())
+		}
+		return
+	}
+
+	common.Success(c, gin.H{"message": "验证码已重新发送"})
 }
 
 // GetBindStatus 获取绑定状态

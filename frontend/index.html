@@ -127,6 +127,14 @@
               <label>教务密码<input id="bindPassword" type="password" autocomplete="current-password" required></label>
               <button class="primary-button compact" type="submit">确认绑定</button>
             </form>
+            <form id="bindMfaForm" class="mfa-inline hidden">
+              <p id="bindMfaHint">学校要求安全验证，请输入绑定手机收到的短信验证码。</p>
+              <div class="inline-form">
+                <label>短信验证码<input id="bindMfaCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="6 位验证码" required></label>
+                <button class="ghost-button" id="bindMfaResend" type="button">重新发送</button>
+                <button class="primary-button compact" type="submit">提交验证码</button>
+              </div>
+            </form>
           </div>
         </section>
 
@@ -226,6 +234,18 @@
     </section>
   </div>
 
+  <div id="mfaDialog" class="mfa-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="mfaTitle">
+    <form id="mfaForm" class="mfa-card">
+      <p class="eyebrow">安全验证</p>
+      <h3 id="mfaTitle">输入手机验证码</h3>
+      <p id="mfaPhoneHint">请输入绑定手机收到的短信验证码</p>
+      <label>短信验证码<input id="mfaCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="6 位验证码" required></label>
+      <div class="mfa-actions">
+        <button class="ghost-button" id="mfaResend" type="button">重新发送</button>
+        <button class="primary-button compact" type="submit">确认</button>
+      </div>
+    </form>
+  </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="loading" class="loading hidden"><span></span><p>正在连接教务系统...</p></div>
   <script src="/app.js"></script>

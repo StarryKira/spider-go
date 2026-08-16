@@ -106,6 +106,15 @@ input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(22,75,59,.0
 .status-pill { border-radius: 99px; padding: 7px 11px; font-size: 10px; font-weight: 800; white-space: nowrap; }
 .status-pill.warning { background: #fff0d4; color: #8a5814; }
 .inline-form { display: grid; grid-template-columns: 1fr 1fr 140px; gap: 12px; align-items: end; margin-top: 22px; }
+.mfa-inline { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.mfa-inline p { margin: 0; color: var(--green); font-weight: 700; }
+.mfa-inline .inline-form { grid-template-columns: 1fr 120px 140px; }
+.ghost-button { border: 1px solid var(--line); border-radius: 11px; background: white; color: var(--ink); min-height: 45px; font-weight: 700; }
+.mfa-dialog { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(23, 32, 28, .42); padding: 24px; }
+.mfa-card { width: min(420px, 100%); background: var(--white); border-radius: 18px; padding: 28px; box-shadow: var(--shadow); display: grid; gap: 14px; }
+.mfa-card h3 { margin: 0; font: 500 28px/1.2 Georgia, "Noto Serif SC", serif; }
+.mfa-card p { margin: 0; color: var(--muted); line-height: 1.6; }
+.mfa-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .section-head { align-items: end; }
 .filter-form { display: flex; gap: 8px; }
 .filter-form input { width: 155px; background: white; }

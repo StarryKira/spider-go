@@ -44,12 +44,13 @@ type Container struct {
 	UserQuery shared.UserQuery
 
 	// Caches
-	SessionCache    cache.SessionCache
-	CaptchaCache    cache.CaptchaCache
-	DAUCache        cache.DAUCache
-	ConfigCache     cache.ConfigCache
-	UserDataCache   cache.UserDataCache
-	EvaluationCache cache.EvaluationCache
+	SessionCache      cache.SessionCache
+	MFAChallengeCache cache.MFAChallengeCache
+	CaptchaCache      cache.CaptchaCache
+	DAUCache          cache.DAUCache
+	ConfigCache       cache.ConfigCache
+	UserDataCache     cache.UserDataCache
+	EvaluationCache   cache.EvaluationCache
 
 	// Services (infrastructure services only)
 	RSAKeyService  service.RSAKeyService
@@ -180,6 +181,7 @@ func (c *Container) initSharedServices() {
 func (c *Container) initCaches() {
 	// 会话缓存（DB 0）
 	c.SessionCache = cache.NewRedisSessionCache(c.SessionRedis)
+	c.MFAChallengeCache = cache.NewRedisMFAChallengeCache(c.SessionRedis)
 	// 验证码缓存（DB 1）
 	c.CaptchaCache = cache.NewRedisCaptchaCache(c.CaptchaRedis)
 	// 日活统计缓存（DB 0，与会话共用）
@@ -204,6 +206,7 @@ func (c *Container) initServices() {
 	// Session Service（根据配置模式注入对应的 URL）
 	c.SessionService = service.NewJwcSessionService(
 		c.SessionCache,
+		c.MFAChallengeCache,
 		c.RSAKeyService,
 		c.Config.Jwc.Mode, // 注入当前模式
 		currentMode.LoginURL,

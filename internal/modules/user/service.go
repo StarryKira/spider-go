@@ -42,6 +42,10 @@ type Service interface {
 
 	// BindJwc 教务系统绑定相关
 	BindJwc(ctx context.Context, uid int, sid, spwd, ipAddress, userAgent string) error
+	// VerifyJwcMFA 提交教务安全手机验证码并完成绑定或登录
+	VerifyJwcMFA(ctx context.Context, uid int, code, ipAddress, userAgent string) error
+	// ResendJwcMFA 重新发送教务安全手机验证码
+	ResendJwcMFA(ctx context.Context, uid int) error
 	// CheckIsBind 检查是否绑定教务处
 	CheckIsBind(ctx context.Context, uid int) (bool, error)
 	// GetBindStatus 获取绑定状态（包含绑定次数信息）
@@ -239,23 +243,45 @@ func (s *userService) BindJwc(ctx context.Context, uid int, sid, spwd, ipAddress
 		return common.NewAppError(common.CodeBindLimitExceeded, "学号已绑定，不允许更换。如需更换请联系管理员")
 	}
 
-	// 3. 判断是否为相同学号（只修改密码）
-	isSameSid := (user.Sid != "" && user.Sid == sid)
-
-	// 4. 验证教务系统账号
-	if err := s.sessionService.LoginCheck(ctx, sid, spwd); err != nil {
-		message := err.Error()
+	// 3. 验证教务系统账号
+	if err := s.sessionService.LoginCheck(ctx, uid, sid, spwd); err != nil {
 		if appErr, ok := err.(*common.AppError); ok {
-			message = appErr.Message
-			_ = s.logBindAttempt(ctx, uid, user.Sid, sid, BindStatusFailedAuth, message, ipAddress, userAgent)
+			if appErr.Code != common.CodeJwcMFARequired {
+				_ = s.logBindAttempt(ctx, uid, user.Sid, sid, BindStatusFailedAuth, appErr.Message, ipAddress, userAgent)
+			}
 			return appErr
 		}
 
-		_ = s.logBindAttempt(ctx, uid, user.Sid, sid, BindStatusFailedAuth, message, ipAddress, userAgent)
-		return common.NewAppError(common.CodeJwcLoginFailed, message)
+		_ = s.logBindAttempt(ctx, uid, user.Sid, sid, BindStatusFailedAuth, err.Error(), ipAddress, userAgent)
+		return common.NewAppError(common.CodeJwcLoginFailed, err.Error())
 	}
 
-	// 5. 开启事务：更新绑定信息
+	return s.saveBind(ctx, user, sid, spwd, ipAddress, userAgent, true)
+}
+
+func (s *userService) VerifyJwcMFA(ctx context.Context, uid int, code, ipAddress, userAgent string) error {
+	challenge, err := s.sessionService.CompletePhoneMFA(ctx, uid, code)
+	if err != nil {
+		return err
+	}
+	if challenge == nil || challenge.Purpose != "bind" {
+		return nil
+	}
+
+	user, err := s.repo.FindByID(ctx, uid)
+	if err != nil {
+		return err
+	}
+	return s.saveBind(ctx, user, challenge.SID, challenge.Password, ipAddress, userAgent, false)
+}
+
+func (s *userService) ResendJwcMFA(ctx context.Context, uid int) error {
+	return s.sessionService.ResendPhoneMFA(ctx, uid)
+}
+
+func (s *userService) saveBind(ctx context.Context, user *User, sid, spwd, ipAddress, userAgent string, invalidateSession bool) error {
+	isSameSid := user.Sid != "" && user.Sid == sid
+
 	tx := s.repo.(*repository).db.Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -263,31 +289,25 @@ func (s *userService) BindJwc(ctx context.Context, uid int, sid, spwd, ipAddress
 		}
 	}()
 
-	// 5.1 更新用户表
 	oldSid := user.Sid
 	now := time.Now()
-
-	// 基础更新字段
 	updates := map[string]interface{}{
 		"sid":          sid,
 		"spwd":         spwd,
 		"last_bind_at": now,
 	}
-
-	// 首次绑定时记录绑定次数
 	if !isSameSid {
 		updates["total_bind_count"] = user.TotalBindCount + 1
 	}
 
-	if err := tx.WithContext(ctx).Model(&User{}).Where("uid = ?", uid).Updates(updates).Error; err != nil {
+	if err := tx.WithContext(ctx).Model(&User{}).Where("uid = ?", user.Uid).Updates(updates).Error; err != nil {
 		tx.Rollback()
-		_ = s.logBindAttempt(ctx, uid, oldSid, sid, BindStatusFailedOther, fmt.Sprintf("更新数据库失败: %v", err), ipAddress, userAgent)
+		_ = s.logBindAttempt(ctx, user.Uid, oldSid, sid, BindStatusFailedOther, fmt.Sprintf("更新数据库失败: %v", err), ipAddress, userAgent)
 		return common.NewAppError(common.CodeDatabaseError, "绑定失败，请稍后重试")
 	}
 
-	// 5.2 记录绑定日志
 	log := &JwcBindLog{
-		Uid:        uid,
+		Uid:        user.Uid,
 		OldSid:     oldSid,
 		NewSid:     sid,
 		BindStatus: BindStatusSuccess,
@@ -300,14 +320,13 @@ func (s *userService) BindJwc(ctx context.Context, uid int, sid, spwd, ipAddress
 		return common.NewAppError(common.CodeDatabaseError, "记录日志失败")
 	}
 
-	// 5.3 提交事务
 	if err := tx.Commit().Error; err != nil {
 		return common.NewAppError(common.CodeDatabaseError, "提交事务失败")
 	}
 
-	// 6. 清除旧的教务系统会话缓存
-	_ = s.sessionService.InvalidateSession(ctx, uid)
-
+	if invalidateSession {
+		_ = s.sessionService.InvalidateSession(ctx, user.Uid)
+	}
 	return nil
 }
 

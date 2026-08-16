@@ -63,6 +63,11 @@ type BindJwcRequest struct {
 	Spwd string `json:"spwd" binding:"required"` // 教务系统密码
 }
 
+// VerifyJwcMFARequest 提交教务安全手机验证码
+type VerifyJwcMFARequest struct {
+	Code string `json:"code" binding:"required"`
+}
+
 // ResetPasswordRequest 重置密码请求
 type ResetPasswordRequest struct {
 	Email    string `json:"email" binding:"required,email"`

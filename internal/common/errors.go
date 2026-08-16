@@ -48,3 +48,6 @@ type AppError = pkgerrors.AppError
 
 // NewAppError 重新导出（保持向后兼容）
 var NewAppError = pkgerrors.NewAppError
+
+// NewAppErrorWithData 重新导出
+var NewAppErrorWithData = pkgerrors.NewAppErrorWithData

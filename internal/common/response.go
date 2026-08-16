@@ -30,7 +30,20 @@ func Error(c *gin.Context, code int, message string) {
 	})
 }
 
+// ErrorWithData 带附加数据的错误响应
+func ErrorWithData(c *gin.Context, code int, message string, data interface{}) {
+	c.JSON(http.StatusOK, Response{
+		Code:    code,
+		Message: message,
+		Data:    data,
+	})
+}
+
 // ErrorWithAppError 使用 AppError 响应
 func ErrorWithAppError(c *gin.Context, err *AppError) {
+	if err.Data != nil {
+		ErrorWithData(c, err.Code, err.Message, err.Data)
+		return
+	}
 	Error(c, err.Code, err.Message)
 }

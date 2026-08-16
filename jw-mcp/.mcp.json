@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "csuft-jw": {
+      "command": "cargo",
+      "args": ["run", "--quiet", "--release", "--manifest-path", "jw-mcp/Cargo.toml", "--"]
+    }
+  }
+}

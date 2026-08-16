@@ -46,12 +46,17 @@ type SessionService interface {
 	// LoginAndGetClient 登录 CAS 并返回带 TGC cookie 的 client，供其他系统复用
 	LoginAndGetClient(ctx context.Context, username, password string) (*http.Client, error)
 	//LoginCheck 模拟一次登录以校验绑定的是否正确
-	LoginCheck(ctx context.Context, username, password string) error
+	LoginCheck(ctx context.Context, uid int, username, password string) error
+	// CompletePhoneMFA 提交安全手机短信验证码并完成待处理的 CAS 登录
+	CompletePhoneMFA(ctx context.Context, uid int, code string) (*cache.MFAChallenge, error)
+	// ResendPhoneMFA 重新发送安全手机短信验证码
+	ResendPhoneMFA(ctx context.Context, uid int) error
 }
 
 // jwcSessionService 教务系统会话服务实现
 type jwcSessionService struct {
 	sessionCache    cache.SessionCache
+	mfaCache        cache.MFAChallengeCache
 	rsaKeyService   RSAKeyService
 	mode            string // 登录模式：campus 或 webvpn
 	loginURL        string
@@ -68,6 +73,7 @@ type jwcSessionService struct {
 // NewJwcSessionService 创建教务系统会话服务
 func NewJwcSessionService(
 	sessionCache cache.SessionCache,
+	mfaCache cache.MFAChallengeCache,
 	rsaKeyService RSAKeyService,
 	mode string,
 	loginURL string,
@@ -79,6 +85,7 @@ func NewJwcSessionService(
 ) SessionService {
 	return &jwcSessionService{
 		sessionCache:    sessionCache,
+		mfaCache:        mfaCache,
 		rsaKeyService:   rsaKeyService,
 		mode:            mode,
 		loginURL:        loginURL,
@@ -134,7 +141,7 @@ func (s *jwcSessionService) followGET(client *http.Client, start string, maxHops
 
 	for i := 0; i < maxHops; i++ {
 		req, _ := http.NewRequest("GET", cur, nil)
-		req.Header.Set("User-Agent", "Mozilla/5.0")
+		req.Header.Set("User-Agent", chromeUserAgent)
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -172,6 +179,58 @@ func (s *jwcSessionService) followGET(client *http.Client, start string, maxHops
 
 	// 重定向层级过多，可能是配置问题或系统异常，不是认证问题
 	return nil, cur, common.NewAppError(common.CodeJwcRequestFailed, "重定向层级过多")
+}
+
+func (s *jwcSessionService) completeJwglTicketLogin(client *http.Client, resp *http.Response, current string) (*http.Response, string, error) {
+	if resp == nil {
+		return resp, current, nil
+	}
+	u, err := url.Parse(current)
+	if err != nil || !strings.Contains(u.Path, "LoginToXk") {
+		return resp, current, nil
+	}
+	ticket := u.Query().Get("ticket")
+	if ticket == "" {
+		return resp, current, nil
+	}
+
+	_ = resp.Body.Close()
+	form := url.Values{
+		"method": {"jwxt"},
+		"ticket": {ticket},
+	}
+	postURL := u.Scheme + "://" + u.Host + u.Path
+	req, err := http.NewRequest(http.MethodPost, postURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, current, err
+	}
+	req.Header.Set("User-Agent", chromeUserAgent)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Referer", current)
+	postResp, err := client.Do(req)
+	if err != nil {
+		return nil, current, err
+	}
+	if postResp.StatusCode/100 == 3 {
+		_ = postResp.Body.Close()
+		loc := postResp.Header.Get("Location")
+		if loc != "" {
+			next := u.ResolveReference(mustParseURL(loc)).String()
+			return s.followGET(client, next, 8)
+		}
+	}
+
+	mainURL := u.Scheme + "://" + u.Host + "/jsxsd/framework/xsMain.jsp"
+	_ = postResp.Body.Close()
+	return s.followGET(client, mainURL, 6)
+}
+
+func mustParseURL(raw string) *url.URL {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return &url.URL{Path: raw}
+	}
+	return u
 }
 
 // GetCachedCookies 获取缓存的 cookies
@@ -215,20 +274,56 @@ func (s *jwcSessionService) encryptPassword(password string) (string, error) {
 	return "__RSA__" + base64.StdEncoding.EncodeToString(encryptedBytes), nil
 }
 
-// GenerateRandomFingerPrintHash 随机生成32位设备指纹hash
+// chromeUserAgent 与 CAS 页面 FingerprintJS 采集时的桌面 Chrome 一致。
+const chromeUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+func setChromeHeaders(req *http.Request, referer string) {
+	req.Header.Set("User-Agent", chromeUserAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+	}
+}
+
+func originFromURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// GenerateRandomFingerPrintHash 生成 FingerprintJS v3 格式的 visitorId（32 位小写 hex）。
 func (s *jwcSessionService) GenerateRandomFingerPrintHash() (string, error) {
-	// 生成 32 字节随机数
-	b := make([]byte, 32)
-	_, err := rand.Read(b)
-	if err != nil {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
+	return hex.EncodeToString(b), nil
+}
 
-	// 计算 SHA256
-	h := sha256.Sum256(b)
+// chromeVisitorID 模拟浏览器 localStorage.fpVisitorId：同一账号保持同一 FingerprintJS visitorId。
+func (s *jwcSessionService) chromeVisitorID(username string) string {
+	sum := sha256.Sum256([]byte("fpjs3:chrome:" + username))
+	return hex.EncodeToString(sum[:16])
+}
 
-	// 转成 hex 字符串返回
-	return hex.EncodeToString(h[:]), nil
+func (s *jwcSessionService) casLoginForm(username, encryptedPwd, execution, fpVisitorID, mfaState string) url.Values {
+	return url.Values{
+		"username":    {username},
+		"password":    {encryptedPwd},
+		"captcha":     {""},
+		"execution":   {execution},
+		"fpVisitorId": {fpVisitorID},
+		"rememberMe":  {"on"},
+		"_eventId":    {"submit"},
+		"failN":       {"0"},
+		"currentMenu": {"1"},
+		"mfaState":    {mfaState},
+		"geolocation": {""},
+		"trustAgent":  {""},
+	}
 }
 
 // LoginAndCacheWithConfig 通用登录方法，支持自定义 URL 和缓存
@@ -249,8 +344,23 @@ func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int
 		},
 	}
 
+	if s.mode == "webvpn" {
+		startedURL, startErr := s.startWebVPNAuth(ctx, client)
+		if startErr != nil {
+			return startErr
+		}
+		if startedURL != "" {
+			loginURL = startedURL
+		}
+	}
+
 	// 1. 请求登录页获取 execution
-	res, err := client.Get(loginURL)
+	loginPageReq, err := http.NewRequestWithContext(ctx, http.MethodGet, loginURL, nil)
+	if err != nil {
+		return common.NewAppError(common.CodeInternalError, "构造登录页请求失败")
+	}
+	setChromeHeaders(loginPageReq, "")
+	res, err := client.Do(loginPageReq)
 	if err != nil {
 		// 检查是否是超时错误
 		if isTimeoutError(err) {
@@ -280,32 +390,18 @@ func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int
 		return common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("密码加密失败: %v", err))
 	}
 
-	fpVisitorId, err := s.GenerateRandomFingerPrintHash()
-	if err != nil {
-		return common.NewAppError(common.CodeInternalError, "生成设备指纹失败")
-	}
+	fpVisitorId := s.chromeVisitorID(username)
 
 	// 2.5 MFA 检测
-	needMFA, mfaState, err := s.detectMFA(ctx, username, password, fpVisitorId)
+	needMFA, mfaState, err := s.detectMFA(ctx, client, username, password, fpVisitorId)
 	if err != nil {
 		return err
 	}
 	if needMFA {
-		return common.NewAppError(common.CodeJwcMFARequired, "需要多因素认证，请前往i中南林APP进行验证")
+		return s.requirePhoneMFA(ctx, client, uid, cache.MFAPurposeLogin, username, password, execution, fpVisitorId, mfaState, loginURL, redirectURL)
 	}
 
-	form := url.Values{
-		"username":    {username},
-		"password":    {encryptedPwd},
-		"execution":   {execution},
-		"fpVisitorId": {fpVisitorId},
-		"rememberMe":  {"on"},
-		"_eventId":    {"submit"},
-		"failN":       {"-1"},
-		"currentMenu": {"1"},
-		"mfaState":    {mfaState},
-		"geolocation": {""},
-	}
+	form := s.casLoginForm(username, encryptedPwd, execution, fpVisitorId, mfaState)
 
 	// 3. 构造 POST 请求
 	req, err := http.NewRequest("POST", loginURL, strings.NewReader(form.Encode()))
@@ -313,9 +409,9 @@ func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int
 		return common.NewAppError(common.CodeInternalError, "构造登录请求失败")
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0")
+	setChromeHeaders(req, loginURL)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Referer", loginURL)
+	req.Header.Set("Origin", originFromURL(loginURL))
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -350,45 +446,8 @@ func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int
 
 	// 4. 提取并缓存 CAS TGC cookie（登录成功后立即保存）
 	if s.mode == "webvpn" && s.webVPNTokenURL != "" && loginRedirect != "" {
-		callbackURL, parseErr := url.Parse(loginRedirect)
-		if parseErr != nil {
-			return common.NewAppError(common.CodeJwcRequestFailed, "WebVPN 回调地址无效")
-		}
-		ticket := callbackURL.Query().Get("ticket")
-		externalID := strings.TrimPrefix(callbackURL.Path, "/callback/cas/")
-		callbackURL.RawQuery = ""
-		if ticket == "" || externalID == "" {
-			return common.NewAppError(common.CodeJwcRequestFailed, "WebVPN 回调缺少认证参数")
-		}
-
-		deviceID := fpVisitorId
-		if len(deviceID) > 32 {
-			deviceID = deviceID[:32]
-		}
-		dataPayload, _ := json.Marshal(map[string]string{
-			"callbackUrl": callbackURL.String(),
-			"ticket":      ticket,
-			"deviceId":    deviceID,
-		})
-		finishPayload, _ := json.Marshal(map[string]string{
-			"externalId": externalID,
-			"data":       string(dataPayload),
-		})
-		finishReq, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, s.webVPNTokenURL, strings.NewReader(string(finishPayload)))
-		if requestErr != nil {
-			return common.NewAppError(common.CodeJwcRequestFailed, "构造 WebVPN 认证请求失败")
-		}
-		finishReq.Header.Set("Content-Type", "application/json")
-		finishReq.Header.Set("Accept", "application/json, text/plain, */*")
-		finishReq.Header.Set("Referer", loginRedirect)
-		finishReq.Header.Set("User-Agent", "Mozilla/5.0")
-		finishResp, finishErr := client.Do(finishReq)
-		if finishErr != nil {
-			return common.NewAppError(common.CodeJwcRequestFailed, "WebVPN 认证请求失败")
-		}
-		_ = finishResp.Body.Close()
-		if finishResp.StatusCode != http.StatusOK {
-			return common.NewAppError(common.CodeJwcRequestFailed, fmt.Sprintf("WebVPN 认证失败: %d", finishResp.StatusCode))
+		if err := s.completeWebVPNFinish(ctx, client, fpVisitorId, loginRedirect); err != nil {
+			return err
 		}
 	}
 
@@ -417,7 +476,10 @@ func (s *jwcSessionService) LoginAndCacheWithConfig(ctx context.Context, uid int
 	}
 
 	// 直接不处理重定向，用这个tgc的cookie去get系统，触发下一条重定向链，get全自动重定向
-	finalResp, finalURL, err := s.followGET(client, redirectURL, 8)
+	finalResp, finalURL, err := s.followGET(client, redirectURL, 12)
+	if err == nil {
+		finalResp, finalURL, err = s.completeJwglTicketLogin(client, finalResp, finalURL)
+	}
 	if err != nil {
 		// 重定向失败可能是网络问题或目标系统不可达，不是认证问题
 		// 检查是否是超时错误
@@ -480,7 +542,12 @@ func (s *jwcSessionService) LoginAndGetClient(ctx context.Context, username, pas
 	}
 
 	// 请求登录页获取 execution
-	res, err := client.Get(s.loginURL)
+	loginPageReq, err := http.NewRequestWithContext(ctx, http.MethodGet, s.loginURL, nil)
+	if err != nil {
+		return nil, common.NewAppError(common.CodeInternalError, "构造登录页请求失败")
+	}
+	setChromeHeaders(loginPageReq, "")
+	res, err := client.Do(loginPageReq)
 	if err != nil {
 		return nil, common.NewAppError(common.CodeJwcLoginFailed, "连接系统失败")
 	}
@@ -511,32 +578,18 @@ func (s *jwcSessionService) LoginAndGetClient(ctx context.Context, username, pas
 		return nil, common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("密码加密失败: %v", err))
 	}
 
-	fpVisitorId, err := s.GenerateRandomFingerPrintHash()
-	if err != nil {
-		return nil, common.NewAppError(common.CodeInternalError, "生成设备指纹失败")
-	}
+	fpVisitorId := s.chromeVisitorID(username)
 
 	// MFA 检测
-	needMFA, mfaState, err := s.detectMFA(ctx, username, password, fpVisitorId)
+	needMFA, mfaState, err := s.detectMFA(ctx, client, username, password, fpVisitorId)
 	if err != nil {
 		return nil, err
 	}
 	if needMFA {
-		return nil, common.NewAppError(common.CodeJwcMFARequired, "需要多因素认证，请前往i中南林APP进行验证")
+		return nil, common.NewAppError(common.CodeJwcMFARequired, "需要手机短信验证，请先在网页端完成绑定")
 	}
 
-	form := url.Values{
-		"username":    {username},
-		"password":    {encryptedPwd},
-		"execution":   {execution},
-		"fpVisitorId": {fpVisitorId},
-		"rememberMe":  {"on"},
-		"_eventId":    {"submit"},
-		"failN":       {"-1"},
-		"currentMenu": {"1"},
-		"mfaState":    {mfaState},
-		"geolocation": {""},
-	}
+	form := s.casLoginForm(username, encryptedPwd, execution, fpVisitorId, mfaState)
 
 	// 构造 POST 请求
 	req, err := http.NewRequest("POST", s.loginURL, strings.NewReader(form.Encode()))
@@ -544,9 +597,9 @@ func (s *jwcSessionService) LoginAndGetClient(ctx context.Context, username, pas
 		return nil, common.NewAppError(common.CodeJwcLoginFailed, "构造登录请求失败")
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0")
+	setChromeHeaders(req, s.loginURL)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Referer", s.loginURL)
+	req.Header.Set("Origin", originFromURL(s.loginURL))
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -574,7 +627,7 @@ func (s *jwcSessionService) LoginAndGetClient(ctx context.Context, username, pas
 }
 
 // LoginCheck 检查账号是否能被教务系统绑定
-func (s *jwcSessionService) LoginCheck(ctx context.Context, username, password string) error {
+func (s *jwcSessionService) LoginCheck(ctx context.Context, uid int, username, password string) error {
 	// 创建 cookie jar
 	jar, err := cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
@@ -592,7 +645,12 @@ func (s *jwcSessionService) LoginCheck(ctx context.Context, username, password s
 	}
 
 	// 请求登录页获取 execution
-	res, err := client.Get(s.loginURL)
+	loginPageReq, err := http.NewRequestWithContext(ctx, http.MethodGet, s.loginURL, nil)
+	if err != nil {
+		return common.NewAppError(common.CodeInternalError, "构造登录页请求失败")
+	}
+	setChromeHeaders(loginPageReq, "")
+	res, err := client.Do(loginPageReq)
 	if err != nil {
 		return common.NewAppError(common.CodeJwcLoginFailed, "连接系统失败")
 	}
@@ -618,32 +676,18 @@ func (s *jwcSessionService) LoginCheck(ctx context.Context, username, password s
 		return common.NewAppError(common.CodeJwcLoginFailed, fmt.Sprintf("密码加密失败: %v", err))
 	}
 
-	fpVisitorId, err := s.GenerateRandomFingerPrintHash()
-	if err != nil {
-		return common.NewAppError(common.CodeInternalError, "生成设备指纹失败")
-	}
+	fpVisitorId := s.chromeVisitorID(username)
 
 	// MFA 检测
-	needMFA, mfaState, err := s.detectMFA(ctx, username, password, fpVisitorId)
+	needMFA, mfaState, err := s.detectMFA(ctx, client, username, password, fpVisitorId)
 	if err != nil {
 		return err
 	}
 	if needMFA {
-		return common.NewAppError(common.CodeJwcMFARequired, "需要多因素认证，请前往i中南林APP进行验证")
+		return s.requirePhoneMFA(ctx, client, uid, cache.MFAPurposeBind, username, password, execution, fpVisitorId, mfaState, s.loginURL, s.redirectURL)
 	}
 
-	form := url.Values{
-		"username":    {username},
-		"password":    {encryptedPwd},
-		"execution":   {execution},
-		"fpVisitorId": {fpVisitorId},
-		"rememberMe":  {"on"},
-		"_eventId":    {"submit"},
-		"failN":       {"-1"},
-		"currentMenu": {"1"},
-		"mfaState":    {mfaState},
-		"geolocation": {""},
-	}
+	form := s.casLoginForm(username, encryptedPwd, execution, fpVisitorId, mfaState)
 
 	// 构造 POST 请求
 	req, err := http.NewRequest("POST", s.loginURL, strings.NewReader(form.Encode()))
@@ -651,9 +695,9 @@ func (s *jwcSessionService) LoginCheck(ctx context.Context, username, password s
 		return common.NewAppError(common.CodeJwcLoginFailed, "构造登录请求失败")
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0")
+	setChromeHeaders(req, s.loginURL)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Referer", s.loginURL)
+	req.Header.Set("Origin", originFromURL(s.loginURL))
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -720,9 +764,12 @@ func isTimeoutError(err error) bool {
 
 // detectMFA 检测是否需要多因素认证
 // 返回 (needMFA, state, error)
-func (s *jwcSessionService) detectMFA(ctx context.Context, username, password, fpVisitorID string) (bool, string, error) {
-	// 如果 MFA 检测 URL 未配置，跳过检测
-	if s.mfaDetectURL == "" {
+func (s *jwcSessionService) detectMFA(ctx context.Context, client *http.Client, username, password, fpVisitorID string) (bool, string, error) {
+	detectURL := s.casAPIURL("/cas/mfa/detect", nil)
+	if detectURL == "" {
+		detectURL = s.mfaDetectURL
+	}
+	if detectURL == "" {
 		return false, "", nil
 	}
 
@@ -740,16 +787,19 @@ func (s *jwcSessionService) detectMFA(ctx context.Context, username, password, f
 	}
 
 	// 创建 HTTP 请求
-	req, err := http.NewRequestWithContext(ctx, "POST", s.mfaDetectURL, strings.NewReader(formData.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", detectURL, strings.NewReader(formData.Encode()))
 	if err != nil {
 		return false, "", common.NewAppError(common.CodeInternalError, "创建 MFA 检测请求失败")
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("User-Agent", chromeUserAgent)
+	req.Header.Set("Origin", originFromURL(detectURL))
+	req.Header.Set("Referer", s.loginURL)
 
-	// 发送请求
-	client := &http.Client{Timeout: s.timeout}
+	if client == nil {
+		client = &http.Client{Timeout: s.timeout}
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		if isTimeoutError(err) {

@@ -43,7 +43,10 @@ async function api(path, options = {}) {
   }
   if (!response.ok || (Object.prototype.hasOwnProperty.call(payload, "code") && payload.code !== 0)) {
     if (payload.code === 40100 || payload.code === 40101) logout(false);
-    throw new Error(payload.message || `请求失败 (${response.status})`);
+    const error = new Error(payload.message || `请求失败 (${response.status})`);
+    error.code = payload.code;
+    error.data = payload.data;
+    throw error;
   }
   return Object.prototype.hasOwnProperty.call(payload, "data") ? payload.data : payload;
 }
@@ -255,17 +258,94 @@ $("#sendCaptchaButton").addEventListener("click", async () => {
   } catch (error) { showToast(error.message, "error"); }
 });
 
+function showBindMfa(phone, message) {
+  const hint = phone ? `请输入手机 ${phone} 收到的短信验证码` : (message || "请输入绑定手机收到的短信验证码");
+  $("#bindMfaHint").textContent = hint;
+  $("#bindMfaForm").classList.remove("hidden");
+  $("#bindMfaCode").value = "";
+  $("#bindMfaCode").focus();
+}
+
+function showMfaDialog(phone, message) {
+  $("#mfaPhoneHint").textContent = phone ? `请输入手机 ${phone} 收到的短信验证码` : (message || "请输入绑定手机收到的短信验证码");
+  $("#mfaCode").value = "";
+  $("#mfaDialog").classList.remove("hidden");
+  $("#mfaCode").focus();
+}
+
+function hideMfaDialog() {
+  $("#mfaDialog").classList.add("hidden");
+}
+
+function handleApiError(error) {
+  if (error.code === 40011) {
+    showMfaDialog(error.data?.phone, error.message);
+    showToast(error.message);
+    return;
+  }
+  showToast(error.message, "error");
+}
+
+async function refreshBoundUser() {
+  state.user = await api("/api/user/info");
+  state.bindStatus = await api("/api/user/bind-status");
+  hydrateDashboard();
+}
+
 $("#bindForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   setLoading(true, "正在验证教务账户，这可能需要一点时间...");
   try {
     await api("/api/user/bind", { method: "POST", body: JSON.stringify({ sid: $("#bindSid").value.trim(), spwd: $("#bindPassword").value }) });
-    state.user = await api("/api/user/info");
-    state.bindStatus = await api("/api/user/bind-status");
-    hydrateDashboard();
+    await refreshBoundUser();
+    $("#bindMfaForm").classList.add("hidden");
     showToast("教务账户绑定成功");
+  } catch (error) {
+    if (error.code === 40011) {
+      showBindMfa(error.data?.phone, error.message);
+      showToast(error.message);
+    } else {
+      showToast(error.message, "error");
+    }
+  } finally { setLoading(false); }
+});
+
+$("#bindMfaForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setLoading(true, "正在校验手机验证码...");
+  try {
+    await api("/api/user/mfa/verify", { method: "POST", body: JSON.stringify({ code: $("#bindMfaCode").value.trim() }) });
+    await refreshBoundUser();
+    $("#bindMfaForm").classList.add("hidden");
+    showToast("手机验证通过，教务账户已绑定");
   } catch (error) { showToast(error.message, "error"); }
   finally { setLoading(false); }
+});
+
+$("#bindMfaResend").addEventListener("click", async () => {
+  try {
+    await api("/api/user/mfa/resend", { method: "POST" });
+    showToast("验证码已重新发送");
+  } catch (error) { showToast(error.message, "error"); }
+});
+
+$("#mfaForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setLoading(true, "正在校验手机验证码...");
+  try {
+    await api("/api/user/mfa/verify", { method: "POST", body: JSON.stringify({ code: $("#mfaCode").value.trim() }) });
+    hideMfaDialog();
+    await refreshBoundUser();
+    showToast("手机验证通过，请重新查询");
+  } catch (error) { showToast(error.message, "error"); }
+  finally { setLoading(false); }
+});
+
+$("#mfaResend").addEventListener("click", async () => {
+  try {
+    await api("/api/user/mfa/resend", { method: "POST" });
+    showToast("验证码已重新发送");
+  } catch (error) { showToast(error.message, "error"); }
 });
 
 $("#gradesFilter").addEventListener("submit", async (event) => {
@@ -276,7 +356,7 @@ $("#gradesFilter").addEventListener("submit", async (event) => {
   try {
     const data = await api(`/api/user/grades${term ? `?term=${encodeURIComponent(term)}` : ""}`);
     renderGrades(data);
-  } catch (error) { showToast(error.message, "error"); }
+  } catch (error) { handleApiError(error); }
   finally { setLoading(false); }
 });
 
@@ -300,7 +380,7 @@ $("#coursesFilter").addEventListener("submit", async (event) => {
   try {
     const data = await api(`/api/user/courses?week=${encodeURIComponent(week)}&term=${encodeURIComponent(term)}`);
     renderCourses(data);
-  } catch (error) { showToast(error.message, "error"); }
+  } catch (error) { handleApiError(error); }
   finally { setLoading(false); }
 });
 
@@ -324,7 +404,7 @@ $("#examsFilter").addEventListener("submit", async (event) => {
   try {
     const data = await api(`/api/user/exams?term=${encodeURIComponent(term)}`);
     renderExams(Array.isArray(data) ? data : data?.exams || []);
-  } catch (error) { showToast(error.message, "error"); }
+  } catch (error) { handleApiError(error); }
   finally { setLoading(false); }
 });
 

@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"log"
+	"spider-go/internal/common"
 	"spider-go/internal/modules/reconciliation"
 	"spider-go/internal/modules/user"
 	"spider-go/internal/service"
@@ -63,8 +64,12 @@ func (t *UserSyncTask) Run(ctx context.Context) error {
 		}
 
 		// 2. 尝试登录验证密码是否有效
-		err := t.sessionService.LoginCheck(ctx, u.Sid, u.Spwd)
+		err := t.sessionService.LoginCheck(ctx, u.Uid, u.Sid, u.Spwd)
 		if err != nil {
+			if appErr, ok := err.(*common.AppError); ok && appErr.Code == common.CodeJwcMFARequired {
+				log.Printf("[UserSyncTask] 用户 %d (学号: %s) 需要手机验证码，跳过本次同步", u.Uid, u.Sid)
+				continue
+			}
 			// 登录失败，密码无效，清除绑定信息
 			log.Printf("[UserSyncTask] 用户 %d (学号: %s) 登录失败，清除绑定信息: %v", u.Uid, u.Sid, err)
 			if clearErr := t.userRepo.ClearJwcBinding(ctx, u.Uid); clearErr != nil {

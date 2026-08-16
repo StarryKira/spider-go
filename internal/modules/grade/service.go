@@ -208,7 +208,7 @@ func (s *gradeService) GetAllGrades(ctx context.Context, uid int) ([]Grade, *GPA
 	}
 
 	// 创建带 2 秒超时的上下文
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	// 尝试从教务系统获取成绩
@@ -624,7 +624,7 @@ func (s *gradeService) GetLevelGrades(ctx context.Context, uid int) ([]LevelGrad
 	}
 
 	// 创建带 2 秒超时的上下文
-	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
 	// 尝试从教务系统获取
